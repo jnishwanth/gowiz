@@ -28,6 +28,7 @@ type Model struct {
 	sceneCursor    int
 	deviceCursor   int
 	sleepTimerSecs int
+	animFrame      int
 	undoStack      map[string][]wiz.PilotParams
 }
 
@@ -64,6 +65,7 @@ type TelemetryReceivedMsg struct {
 }
 type TimerTickMsg time.Time
 type TelemetryTickMsg time.Time
+type AnimTickMsg time.Time
 
 func tickTimerCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -77,8 +79,14 @@ func tickTelemetryCmd() tea.Cmd {
 	})
 }
 
+func tickAnimCmd() tea.Cmd {
+	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
+		return AnimTickMsg(t)
+	})
+}
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.scanNetworkCmd(), tickTimerCmd(), tickTelemetryCmd(), m.pollTelemetryCmd())
+	return tea.Batch(m.scanNetworkCmd(), tickTimerCmd(), tickTelemetryCmd(), tickAnimCmd(), m.pollTelemetryCmd())
 }
 
 func (m Model) scanNetworkCmd() tea.Cmd {
@@ -151,6 +159,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case AnimTickMsg:
+		m.animFrame++
+		cmds = append(cmds, tickAnimCmd())
+
 	case TimerTickMsg:
 		if m.sleepTimerSecs > 0 {
 			m.sleepTimerSecs--
@@ -183,18 +195,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Registry.AddOrUpdate(wiz.NewDevice(ip))
 			foundCount++
 		}
-		m.statusMessage = fmt.Sprintf("Network scan complete. Found %d device(s).", foundCount)
+		m.setStatusMessage(fmt.Sprintf("Network scan complete. Found %d device(s).", foundCount))
 
 	case CommandFinishedMsg:
 		if msg.Err != nil {
-			m.statusMessage = fmt.Sprintf("⚠️ Light unreachable: %v", msg.Err)
+			m.setStatusMessage(fmt.Sprintf("⚠️ Light unreachable: %v", msg.Err))
 			for _, ip := range msg.IPs {
 				if dev, found := m.Registry.Get(ip); found {
 					dev.Online = false
 				}
 			}
 		} else {
-			m.statusMessage = "✓ Command confirmed by physical light."
+			m.setStatusMessage("✓ Command confirmed by physical light.")
 			for _, ip := range msg.IPs {
 				if dev, found := m.Registry.Get(ip); found {
 					dev.UpdateFromPilot(msg.Params)
@@ -244,7 +256,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		sceneID := int(key[0] - '0')
 		scene := wiz.GetSceneByID(sceneID)
-		m.statusMessage = fmt.Sprintf("Sending Scene: %s...", scene.Name)
+		m.setStatusMessage(fmt.Sprintf("Sending Scene: %s...", scene.Name))
 		return m, m.dispatchPilotCmd(wiz.NewSceneParams(sceneID))
 	}
 
@@ -314,7 +326,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 			scenes := wiz.FilterScenes(m.searchQuery)
 			if m.sceneCursor >= 0 && m.sceneCursor < len(scenes) {
 				sc := scenes[m.sceneCursor]
-				m.statusMessage = fmt.Sprintf("Sending Scene: %s...", sc.Name)
+				m.setStatusMessage(fmt.Sprintf("Sending Scene: %s...", sc.Name))
 				return m, m.dispatchPilotCmd(wiz.NewSceneParams(sc.ID))
 			}
 		}
@@ -358,7 +370,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 
 	case "t":
 		m.sleepTimerSecs = 15 * 60
-		m.statusMessage = "Sleep timer set: 15 minutes."
+		m.setStatusMessage("Sleep timer set: 15 minutes.")
 		return m, nil
 
 	case "[":
@@ -393,7 +405,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "R":
-		m.statusMessage = "Rescanning network..."
+		m.setStatusMessage("Rescanning network...")
 		return m, m.scanNetworkCmd()
 
 	case "u":
@@ -405,7 +417,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 				m.undoStack[active.IP] = stack[:len(stack)-1]
 				return m, m.dispatchPilotCmd(lastState)
 			}
-			m.statusMessage = "Nothing to undo."
+			m.setStatusMessage("Nothing to undo.")
 		}
 	}
 
@@ -506,14 +518,14 @@ func (m Model) executeVimCommand(cmdStr string) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "scan":
-		m.statusMessage = "Scanning subnet broadcasts..."
+		m.setStatusMessage("Scanning subnet broadcasts...")
 		return m, m.scanNetworkCmd()
 
 	case "timer":
 		if len(parts) > 1 {
 			if mins, err := strconv.Atoi(parts[1]); err == nil {
 				m.sleepTimerSecs = mins * 60
-				m.statusMessage = fmt.Sprintf("Sleep timer set for %d minutes.", mins)
+				m.setStatusMessage(fmt.Sprintf("Sleep timer set for %d minutes.", mins))
 			}
 		}
 
@@ -522,7 +534,7 @@ func (m Model) executeVimCommand(cmdStr string) (Model, tea.Cmd) {
 			ip := parts[1]
 			m.Registry.AddOrUpdate(wiz.NewDevice(ip))
 			m.Registry.SetActive(ip)
-			m.statusMessage = fmt.Sprintf("Connected to %s", ip)
+			m.setStatusMessage(fmt.Sprintf("Connected to %s", ip))
 		}
 
 	case "scene":
@@ -534,7 +546,7 @@ func (m Model) executeVimCommand(cmdStr string) (Model, tea.Cmd) {
 			if scene, found := wiz.GetSceneByName(target); found {
 				return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
 			}
-			m.statusMessage = fmt.Sprintf("Unknown scene: %s", target)
+			m.setStatusMessage(fmt.Sprintf("Unknown scene: %s", target))
 		}
 
 	case "temp", "cct":
@@ -560,7 +572,7 @@ func (m Model) executeVimCommand(cmdStr string) (Model, tea.Cmd) {
 		}
 
 	default:
-		m.statusMessage = fmt.Sprintf("Unknown command: :%s", cmdStr)
+		m.setStatusMessage(fmt.Sprintf("Unknown command: :%s", cmdStr))
 	}
 
 	return m, nil
@@ -587,7 +599,7 @@ func (m Model) View() string {
 	if activeDev != nil {
 		activeSceneID = activeDev.SceneID
 	}
-	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.activePanel == PanelScenes, mainWidth, sceneHeight)
+	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.activePanel == PanelScenes, m.animFrame, mainWidth, sceneHeight)
 
 	rightCol := lipgloss.JoinVertical(lipgloss.Left, topRight, bottomRight)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightCol)

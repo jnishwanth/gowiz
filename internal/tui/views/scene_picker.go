@@ -9,7 +9,7 @@ import (
 	"wiz-tui/internal/wiz"
 )
 
-func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, width, height int) string {
+func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, animFrame int, width, height int) string {
 	scenes := wiz.FilterScenes(filterQuery)
 
 	var sb strings.Builder
@@ -32,7 +32,10 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 			}
 
 			isCurrent := scene.ID == activeSceneID
-			accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true)
+
+			// Dynamic color shifting swatch mimicking actual bulb light output
+			currentHex := scene.GetAccentColor(animFrame)
+			accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(currentHex)).Bold(true)
 
 			prefix := "  "
 			if isCurrent {
@@ -45,9 +48,9 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 			}
 
 			nameStr := lipgloss.NewStyle().MaxWidth(max(width-28, 8)).Render(scene.Name)
-			badge := accentStyle.Render(fmt.Sprintf("%s %-13s", shortcut, nameStr))
+			nameBadge := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true).Render(fmt.Sprintf("%s %-13s", shortcut, nameStr))
 
-			// Replicate physical bulb light output color swatch
+			// Live animated bulb output color swatch
 			swatch := accentStyle.Render("████")
 
 			desc := ""
@@ -55,7 +58,7 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 				desc = "  " + styles.DimText.Render(scene.Description)
 			}
 
-			sb.WriteString(fmt.Sprintf("%s%s %s%s\n", prefix, badge, swatch, desc))
+			sb.WriteString(fmt.Sprintf("%s%s %s%s\n", prefix, nameBadge, swatch, desc))
 		}
 	}
 
