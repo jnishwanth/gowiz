@@ -12,6 +12,31 @@ func TestTUIStateSynchronization(t *testing.T) {
 	mockClient := wiz.NewMockClient()
 	m := NewModel(mockClient, "192.168.1.115")
 
+	t.Run("Responsive terminal layout rendering", func(t *testing.T) {
+		sizes := []struct {
+			w, h int
+			name string
+		}{
+			{140, 50, "Ultrawide 140x50"},
+			{80, 24, "Standard VT100 80x24"},
+			{60, 18, "Compact Pane 60x18"},
+			{45, 14, "Mobile Narrow Pane 45x14"},
+		}
+
+		for _, sz := range sizes {
+			updated, _ := m.Update(tea.WindowSizeMsg{Width: sz.w, Height: sz.h})
+			mod := updated.(Model)
+			viewOutput := mod.View()
+
+			if len(viewOutput) == 0 {
+				t.Errorf("%s: view output is empty", sz.name)
+			}
+			if !strings.Contains(viewOutput, "gowiz") {
+				t.Errorf("%s: view output missing title header", sz.name)
+			}
+		}
+	})
+
 	t.Run("Panel tabbing consistency", func(t *testing.T) {
 		if m.activePanel != PanelDevices {
 			t.Fatalf("expected initial PanelDevices, got %v", m.activePanel)

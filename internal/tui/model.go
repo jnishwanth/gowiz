@@ -586,26 +586,11 @@ func (m Model) View() string {
 		return views.RenderHelpOverlay(m.width, m.height)
 	}
 
-	sideWidth := clamp(int(float64(m.width)*0.28), 22, 34)
-	mainWidth := max(m.width-sideWidth-4, 28)
-	contentHeight := max(m.height-3, 10)
-
-	leftCol := views.RenderDeviceList(m.Registry, m.deviceCursor, m.activePanel == PanelDevices, sideWidth, contentHeight)
-
-	controlHeight := int(float64(contentHeight) * 0.40)
-	sceneHeight := contentHeight - controlHeight
-
 	activeDev, _ := m.Registry.GetActive()
-	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, controlHeight)
-
 	activeSceneID := 0
 	if activeDev != nil {
 		activeSceneID = activeDev.SceneID
 	}
-	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, m.activePanel == PanelScenes, m.animFrame, mainWidth, sceneHeight)
-
-	rightCol := lipgloss.JoinVertical(lipgloss.Left, topRight, bottomRight)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightCol)
 
 	selectedCount := 0
 	for _, dev := range m.Registry.List() {
@@ -625,6 +610,38 @@ func (m Model) View() string {
 	)
 
 	titleBar := styles.AppTitleStyle.Render("⚡ gowiz - WiZ Smart Light Controller")
+
+	// Compact / Narrow Terminal Mode (width < 65 or height < 15)
+	if m.width < 65 || m.height < 15 {
+		contentHeight := max(m.height-2, 6)
+		var activeBody string
+
+		switch m.activePanel {
+		case PanelDevices:
+			activeBody = views.RenderDeviceList(m.Registry, m.deviceCursor, true, m.width, contentHeight)
+		case PanelControl:
+			activeBody = views.RenderControlPanel(activeDev, true, m.sleepTimerSecs, m.width, contentHeight)
+		case PanelScenes:
+			activeBody = views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, true, m.animFrame, m.width, contentHeight)
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, titleBar, activeBody, statusBar)
+	}
+
+	// Standard 2-Column Responsive Grid Layout
+	contentHeight := max(m.height-2, 8)
+	sideWidth := clamp(int(float64(m.width)*0.28), 20, 30)
+	mainWidth := max(m.width-sideWidth, 30)
+
+	leftCol := views.RenderDeviceList(m.Registry, m.deviceCursor, m.activePanel == PanelDevices, sideWidth, contentHeight)
+
+	controlHeight := int(float64(contentHeight) * 0.40)
+	sceneHeight := contentHeight - controlHeight
+
+	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, controlHeight)
+	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, m.activePanel == PanelScenes, m.animFrame, mainWidth, sceneHeight)
+
+	rightCol := lipgloss.JoinVertical(lipgloss.Left, topRight, bottomRight)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightCol)
 
 	return lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusBar)
 }
