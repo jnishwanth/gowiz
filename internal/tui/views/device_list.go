@@ -9,7 +9,7 @@ import (
 	"wiz-tui/internal/wiz"
 )
 
-func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int) string {
+func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool, width, height int) string {
 	devices := reg.List()
 	activeDev, _ := reg.GetActive()
 
@@ -25,7 +25,7 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 	if len(devices) == 0 {
 		sb.WriteString(styles.DimText.Render("No WiZ lights.\nPress [R] to scan."))
 	} else {
-		maxLines := max(height-4, 5)
+		maxLines := max(height-5, 4)
 
 		for i, dev := range devices {
 			if i >= maxLines {
@@ -33,6 +33,7 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 				break
 			}
 
+			isCursor := isFocused && i == deviceCursor
 			isTarget := activeDev != nil && activeDev.IP == dev.IP
 
 			statusDot := styles.StatusSuccess.Render("●")
@@ -56,11 +57,17 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 			ipTruncated := lipgloss.NewStyle().MaxWidth(max(width-14, 8)).Render(ipText)
 			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, ipTruncated)
 
-			if isTarget {
-				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line) + "\n")
+			if isCursor {
+				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+" ↵") + "\n")
+			} else if isTarget {
+				sb.WriteString(styles.SelectedItemStyle.Render("  "+line) + "\n")
 			} else {
 				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + "\n")
 			}
+		}
+
+		if isFocused {
+			sb.WriteString("\n" + styles.DimText.Render("💡 [j/k] Move • [Enter] Target • [Space] Power/Select"))
 		}
 	}
 

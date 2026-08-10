@@ -9,7 +9,7 @@ import (
 	"wiz-tui/internal/wiz"
 )
 
-func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, animFrame int, width, height int) string {
+func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, isFocused bool, animFrame int, width, height int) string {
 	scenes := wiz.FilterScenes(filterQuery)
 
 	var sb strings.Builder
@@ -27,7 +27,7 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, an
 	if len(scenes) == 0 {
 		sb.WriteString(styles.DimText.Render("No scenes match query.\nPress [Esc] to clear filter."))
 	} else {
-		maxLines := max(height-4, 5)
+		maxLines := max(height-5, 4)
 
 		for i, scene := range scenes {
 			if i >= maxLines {
@@ -36,32 +36,39 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, an
 				break
 			}
 
-			isCurrent := scene.ID == activeSceneID
+			isCursor := isFocused && i == sceneCursor
+			isActiveOnLight := scene.ID == activeSceneID
 
 			currentHex := scene.GetAccentColor(animFrame)
 			accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(currentHex)).Bold(true)
-
-			prefix := "  "
-			if isCurrent {
-				prefix = styles.StatusSuccess.Render("▸ ")
-			}
 
 			shortcut := "   "
 			if scene.ID >= 1 && scene.ID <= 9 {
 				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
 			}
 
-			nameStr := lipgloss.NewStyle().MaxWidth(max(width-28, 8)).Render(scene.Name)
-			nameBadge := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true).Render(fmt.Sprintf("%s %-13s", shortcut, nameStr))
+			nameStr := lipgloss.NewStyle().MaxWidth(max(width-30, 8)).Render(scene.Name)
+			nameBadge := accentStyle.Render(fmt.Sprintf("%s %-12s", shortcut, nameStr))
 
 			swatch := accentStyle.Render("████")
 
-			desc := ""
-			if width > 52 {
-				desc = "  " + styles.DimText.Render(scene.Description)
+			activeBadge := ""
+			if isActiveOnLight {
+				activeBadge = " " + styles.StatusSuccess.Render("[ACTIVE ON LIGHT]")
 			}
 
-			sb.WriteString(fmt.Sprintf("%s%s %s%s\n", prefix, nameBadge, swatch, desc))
+			line := fmt.Sprintf("%s %s%s", nameBadge, swatch, activeBadge)
+
+			if isCursor {
+				applyHint := styles.StatusSuccess.Render(" ↵ Press Enter to Apply")
+				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+applyHint) + "\n")
+			} else {
+				sb.WriteString("  " + line + "\n")
+			}
+		}
+
+		if isFocused {
+			sb.WriteString("\n" + styles.DimText.Render("💡 Press [j/k] to navigate • [Enter/Space] to Apply scene to bulb"))
 		}
 	}
 

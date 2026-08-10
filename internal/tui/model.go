@@ -599,7 +599,7 @@ func (m Model) View() string {
 	mainWidth := max(m.width-sideWidth-6, 30)
 	contentHeight := max(m.height-4, 12)
 
-	leftCol := views.RenderDeviceList(m.Registry, m.activePanel == PanelDevices, sideWidth, contentHeight)
+	leftCol := views.RenderDeviceList(m.Registry, m.deviceCursor, m.activePanel == PanelDevices, sideWidth, contentHeight)
 
 	controlHeight := int(float64(contentHeight) * 0.45)
 	sceneHeight := contentHeight - controlHeight - 2
@@ -611,7 +611,7 @@ func (m Model) View() string {
 	if activeDev != nil {
 		activeSceneID = activeDev.SceneID
 	}
-	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.activePanel == PanelScenes, m.animFrame, mainWidth, sceneHeight)
+	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, m.activePanel == PanelScenes, m.animFrame, mainWidth, sceneHeight)
 
 	rightCol := lipgloss.JoinVertical(lipgloss.Left, topRight, bottomRight)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightCol)
