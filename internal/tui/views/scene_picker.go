@@ -17,7 +17,8 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 		title += fmt.Sprintf(" [Filter: %s]", filterQuery)
 	}
 
-	header := RenderSectionHeader(title, isFocused, width-6)
+	innerWidth := max(width-6, 26)
+	header := RenderSectionHeader(title, isFocused, innerWidth)
 
 	var sb strings.Builder
 	sb.WriteString(header + "\n\n")
@@ -49,41 +50,53 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 			isCursor := isFocused && i == sceneCursor
 			isActiveOnLight := scene.ID == activeSceneID
 
+			// Swatch pill pulsates only when Dynamic Scenes panel is focused; frozen when unfocused
 			swatchHex := scene.AccentColor
 			if isFocused {
 				swatchHex = scene.GetAccentColor(animFrame)
 			}
 			swatchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(swatchHex)).Bold(true)
 
-			shortcut := "   "
+			// 1. Shortcut pill (3 visual chars)
+			shortcutStr := "   "
 			if scene.ID >= 1 && scene.ID <= 9 {
-				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
+				shortcutStr = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
 			}
 
-			nameStr := lipgloss.NewStyle().MaxWidth(max(width-32, 8)).Render(scene.Name)
-			nameBadge := fmt.Sprintf("%s %-12s", shortcut, nameStr)
+			// 2. Fixed-width Scene Name (14 visual chars) for 100% pixel-perfect swatch pill alignment
+			nameFormatted := lipgloss.NewStyle().Width(14).Render(scene.Name)
 
+			// 3. Swatch pill (4 visual chars)
 			swatch := swatchStyle.Render("████")
 
+			// 4. Status badges
 			activeBadge := ""
 			if isActiveOnLight {
-				activeBadge = " " + styles.StatusSuccess.Render("[ACTIVE ON LIGHT]")
+				activeBadge = " " + styles.StatusSuccess.Render("[ACTIVE]")
 			}
 
-			line := fmt.Sprintf("%s %s%s", nameBadge, swatch, activeBadge)
+			// Build left content line with strictly aligned swatch column
+			leftContent := fmt.Sprintf("%s %s %s%s", shortcutStr, nameFormatted, swatch, activeBadge)
 
+			if isCursor {
+				applyHint := styles.StatusSuccess.Render(" ↵ Enter")
+				leftContent = styles.SelectedItemStyle.Render("▸ " + leftContent + applyHint)
+			} else {
+				leftContent = "  " + styles.UnselectedItemStyle.Render(leftContent)
+			}
+
+			// 5. Very-right scrollbar positioning
 			scrollChar := " "
 			lineIdx := i - offset
 			if scrollbarLines != nil && lineIdx < len(scrollbarLines) {
 				scrollChar = scrollbarLines[lineIdx]
 			}
 
-			if isCursor {
-				applyHint := styles.StatusSuccess.Render(" ↵ Enter")
-				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+applyHint) + " " + scrollChar + "\n")
-			} else {
-				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + " " + scrollChar + "\n")
-			}
+			leftWidth := lipgloss.Width(leftContent)
+			padSpaces := max(0, innerWidth-leftWidth)
+			fullRow := leftContent + strings.Repeat(" ", padSpaces) + scrollChar
+
+			sb.WriteString(fullRow + "\n")
 		}
 	}
 

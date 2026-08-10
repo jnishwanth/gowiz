@@ -13,7 +13,8 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 	devices := reg.List()
 	activeDev, _ := reg.GetActive()
 
-	header := RenderSectionHeader("⚡ Bulbs", isFocused, width-6)
+	innerWidth := max(width-6, 18)
+	header := RenderSectionHeader("⚡ Bulbs", isFocused, innerWidth)
 
 	var sb strings.Builder
 	sb.WriteString(header + "\n\n")
@@ -58,12 +59,20 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 			}
 
 			ipText := dev.IP
-			if dev.IsFallback && width > 28 {
+			if dev.IsFallback && innerWidth > 22 {
 				ipText += " (FB)"
 			}
 
-			ipTruncated := lipgloss.NewStyle().MaxWidth(max(width-16, 8)).Render(ipText)
+			ipTruncated := lipgloss.NewStyle().MaxWidth(max(innerWidth-12, 8)).Render(ipText)
 			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, ipTruncated)
+
+			if isCursor {
+				line = styles.SelectedItemStyle.Render("▸ " + line + " ↵")
+			} else if isTarget {
+				line = styles.SelectedItemStyle.Render("  " + line)
+			} else {
+				line = "  " + styles.UnselectedItemStyle.Render(line)
+			}
 
 			scrollChar := " "
 			lineIdx := i - offset
@@ -71,13 +80,11 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 				scrollChar = scrollbarLines[lineIdx]
 			}
 
-			if isCursor {
-				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+" ↵") + " " + scrollChar + "\n")
-			} else if isTarget {
-				sb.WriteString(styles.SelectedItemStyle.Render("  "+line) + " " + scrollChar + "\n")
-			} else {
-				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + " " + scrollChar + "\n")
-			}
+			leftWidth := lipgloss.Width(line)
+			padSpaces := max(0, innerWidth-leftWidth)
+			fullRow := line + strings.Repeat(" ", padSpaces) + scrollChar
+
+			sb.WriteString(fullRow + "\n")
 		}
 	}
 
