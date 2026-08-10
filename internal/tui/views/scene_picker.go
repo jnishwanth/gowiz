@@ -44,15 +44,18 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
 			}
 
-			nameStr := lipgloss.NewStyle().MaxWidth(max(width-24, 8)).Render(scene.Name)
-			badge := accentStyle.Render(fmt.Sprintf("%s %-12s", shortcut, nameStr))
+			nameStr := lipgloss.NewStyle().MaxWidth(max(width-28, 8)).Render(scene.Name)
+			badge := accentStyle.Render(fmt.Sprintf("%s %-13s", shortcut, nameStr))
 
-			catPill := ""
-			if width > 42 {
-				catPill = " " + renderCategoryPill(scene.Category)
+			// Replicate physical bulb light output color swatch
+			swatch := accentStyle.Render("████")
+
+			desc := ""
+			if width > 52 {
+				desc = "  " + styles.DimText.Render(scene.Description)
 			}
 
-			sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, badge, catPill))
+			sb.WriteString(fmt.Sprintf("%s%s %s%s\n", prefix, badge, swatch, desc))
 		}
 	}
 
@@ -65,25 +68,4 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 		Width(max(width-2, 20)).
 		Height(max(height-2, 6)).
 		Render(sb.String())
-}
-
-func renderCategoryPill(cat string) string {
-	switch cat {
-	case "Nature":
-		return styles.CategoryNature.Render("Nature")
-	case "Cozy":
-		return styles.CategoryCozy.Render("Cozy")
-	case "Dynamic":
-		return styles.CategoryDynamic.Render("Dynamic")
-	case "White":
-		return styles.CategoryWhite.Render("White")
-	case "Seasons":
-		return styles.CategorySeasons.Render("Seasons")
-	case "Festive":
-		return styles.CategoryFestive.Render("Festive")
-	case "Special":
-		return styles.CategorySpecial.Render("Special")
-	default:
-		return styles.DimText.Render("(" + cat + ")")
-	}
 }
