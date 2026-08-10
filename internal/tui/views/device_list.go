@@ -13,26 +13,34 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 	devices := reg.List()
 	activeDev, _ := reg.GetActive()
 
+	header := RenderSectionHeader("⚡ Bulbs", isFocused, width-6)
+
 	var sb strings.Builder
-	title := "⚡ Bulbs"
-	if isFocused {
-		title += " [ACTIVE]"
-		sb.WriteString(styles.FocusedSectionTitleStyle.Render(title) + "\n\n")
-	} else {
-		sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n\n")
-	}
+	sb.WriteString(header + "\n\n")
 
 	if len(devices) == 0 {
 		sb.WriteString(styles.DimText.Render("No WiZ lights.\nPress [R] to scan."))
 	} else {
 		maxLines := max(height-4, 3)
 
-		for i, dev := range devices {
-			if i >= maxLines {
-				sb.WriteString(styles.DimText.Render(fmt.Sprintf("... +%d more", len(devices)-i)) + "\n")
-				break
-			}
+		offset := 0
+		if deviceCursor >= maxLines {
+			offset = deviceCursor - maxLines + 1
+		}
+		if offset > len(devices)-maxLines && len(devices) > maxLines {
+			offset = len(devices) - maxLines
+		}
+		if offset < 0 {
+			offset = 0
+		}
 
+		endIdx := min(offset+maxLines, len(devices))
+		visibleCount := endIdx - offset
+
+		scrollbarLines := RenderScrollbar(visibleCount, len(devices), maxLines, offset)
+
+		for i := offset; i < endIdx; i++ {
+			dev := devices[i]
 			isCursor := isFocused && i == deviceCursor
 			isTarget := activeDev != nil && activeDev.IP == dev.IP
 
@@ -54,15 +62,21 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 				ipText += " (FB)"
 			}
 
-			ipTruncated := lipgloss.NewStyle().MaxWidth(max(width-14, 8)).Render(ipText)
+			ipTruncated := lipgloss.NewStyle().MaxWidth(max(width-16, 8)).Render(ipText)
 			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, ipTruncated)
 
+			scrollChar := " "
+			lineIdx := i - offset
+			if scrollbarLines != nil && lineIdx < len(scrollbarLines) {
+				scrollChar = scrollbarLines[lineIdx]
+			}
+
 			if isCursor {
-				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+" ↵") + "\n")
+				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+" ↵") + " " + scrollChar + "\n")
 			} else if isTarget {
-				sb.WriteString(styles.SelectedItemStyle.Render("  "+line) + "\n")
+				sb.WriteString(styles.SelectedItemStyle.Render("  "+line) + " " + scrollChar + "\n")
 			} else {
-				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + "\n")
+				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + " " + scrollChar + "\n")
 			}
 		}
 	}

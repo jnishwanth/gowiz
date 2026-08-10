@@ -169,6 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.sleepTimerSecs == 0 {
 				m.setStatusMessage("Sleep timer expired. Turning off lights.")
 				cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
+				cmds = append(cmds, SendOSCNotification("gowiz Sleep Timer", "Sleep timer expired. Turning off WiZ lights."))
 			}
 		}
 		if m.statusMessage != "" && time.Since(m.statusTimer) > 4*time.Second {
@@ -196,6 +197,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			foundCount++
 		}
 		m.setStatusMessage(fmt.Sprintf("Network scan complete. Found %d device(s).", foundCount))
+		cmds = append(cmds, SendOSCNotification("gowiz Network Scan", fmt.Sprintf("Found %d WiZ device(s) on network.", foundCount)))
 
 	case CommandFinishedMsg:
 		if msg.Err != nil {

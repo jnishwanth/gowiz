@@ -11,14 +11,10 @@ import (
 )
 
 func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, width, height int) string {
+	header := RenderSectionHeader("🎛 Control Center", isFocused, width-6)
+
 	var sb strings.Builder
-	title := "🎛 Control Center"
-	if isFocused {
-		title += " [ACTIVE]"
-		sb.WriteString(styles.FocusedSectionTitleStyle.Render(title) + "\n")
-	} else {
-		sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n")
-	}
+	sb.WriteString(header + "\n\n")
 
 	if dev == nil {
 		sb.WriteString(styles.DimText.Render("No active device selected."))
