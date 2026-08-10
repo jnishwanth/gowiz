@@ -8,7 +8,7 @@ type Scene struct {
 	Category    string
 	Description string
 	AccentColor string   // Primary hex color string for UI rendering
-	Palette     []string // Animated color sequence mimicking physical bulb output
+	Palette     []string // Animated color sequence mimicking physical bulb output (empty for static scenes)
 }
 
 func (s Scene) GetAccentColor(frame int) string {
@@ -19,6 +19,7 @@ func (s Scene) GetAccentColor(frame int) string {
 }
 
 var AllScenes = []Scene{
+	// 25 Dynamic Scenes (Shifting Color Palettes)
 	{ID: 1, Name: "Ocean", Category: "Nature", Description: "Refreshing blue waves", AccentColor: "#0077be", Palette: []string{"#0077be", "#00bfff", "#004080", "#20b2aa"}},
 	{ID: 2, Name: "Romance", Category: "Cozy", Description: "Intimate magenta & purple ambiance", AccentColor: "#e91e63", Palette: []string{"#e91e63", "#9c27b0", "#ff4081", "#7b1fa2"}},
 	{ID: 3, Name: "Sunset", Category: "Nature", Description: "Warm golden glow", AccentColor: "#ff4500", Palette: []string{"#ff4500", "#ff8c00", "#ff2400", "#d84315"}},
@@ -29,6 +30,8 @@ var AllScenes = []Scene{
 	{ID: 8, Name: "Pastel colors", Category: "Dynamic", Description: "Gentle pastel gradients", AccentColor: "#b19cd9", Palette: []string{"#b19cd9", "#ffb3ba", "#baffc9", "#bae1ff"}},
 	{ID: 9, Name: "Wake-up", Category: "Rhythm", Description: "Gradual morning sunlight", AccentColor: "#ffeb3b", Palette: []string{"#ff8f00", "#ffc107", "#ffeb3b", "#ffffff"}},
 	{ID: 10, Name: "Bedtime", Category: "Rhythm", Description: "Dimming evening tones", AccentColor: "#4a148c", Palette: []string{"#ff8f00", "#e65100", "#4a148c", "#1a237e"}},
+
+	// 9 Static / Functional Spectrum Scenes (Fixed Output Colors)
 	{ID: 11, Name: "Warm white", Category: "White", Description: "2700K classic warmth", AccentColor: "#ffcc66"},
 	{ID: 12, Name: "Daylight", Category: "White", Description: "6500K bright focus white", AccentColor: "#e0f7fa"},
 	{ID: 13, Name: "Cool white", Category: "White", Description: "4000K balanced crisp white", AccentColor: "#ffffff"},
@@ -36,8 +39,10 @@ var AllScenes = []Scene{
 	{ID: 15, Name: "Focus", Category: "White", Description: "High productivity lighting", AccentColor: "#81d4fa"},
 	{ID: 16, Name: "Relax", Category: "White", Description: "Soothing neutral light", AccentColor: "#ffe0b2"},
 	{ID: 17, Name: "True colors", Category: "White", Description: "High CRI natural rendering", AccentColor: "#ffffff"},
+
 	{ID: 18, Name: "TV time", Category: "Cozy", Description: "Ambient home cinema backdrop", AccentColor: "#1a237e", Palette: []string{"#1a237e", "#283593", "#0d47a1", "#311b92"}},
-	{ID: 19, Name: "Plant growth", Category: "Special", Description: "Optimal spectrum for flora", AccentColor: "#e91e63", Palette: []string{"#e91e63", "#ab47bc", "#8e24aa", "#f48fb1"}},
+	{ID: 19, Name: "Plant growth", Category: "Special", Description: "Optimal spectrum for flora", AccentColor: "#e91e63"},
+
 	{ID: 20, Name: "Spring", Category: "Seasons", Description: "Lush blooming hues", AccentColor: "#76ff03", Palette: []string{"#76ff03", "#ff4081", "#a7ffeb", "#ffff00"}},
 	{ID: 21, Name: "Summer", Category: "Seasons", Description: "Bright sun-drenched radiance", AccentColor: "#ffc107", Palette: []string{"#ffc107", "#ff9800", "#ff5722", "#ffeb3b"}},
 	{ID: 22, Name: "Fall", Category: "Seasons", Description: "Crisp autumn foliage amber", AccentColor: "#d84315", Palette: []string{"#d84315", "#ef6c00", "#f57f17", "#bf360c"}},
