@@ -53,10 +53,17 @@ func NewModel(client wiz.Client, initialIP string) Model {
 
 type ScanFinishedMsg []string
 type CommandFinishedMsg struct {
-	Err error
-	IP  string
+	Err    error
+	IPs    []string
+	Params wiz.PilotParams
+}
+type TelemetryReceivedMsg struct {
+	IP    string
+	Pilot *wiz.PilotParams
+	Err   error
 }
 type TimerTickMsg time.Time
+type TelemetryTickMsg time.Time
 
 func tickTimerCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -64,8 +71,14 @@ func tickTimerCmd() tea.Cmd {
 	})
 }
 
+func tickTelemetryCmd() tea.Cmd {
+	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+		return TelemetryTickMsg(t)
+	})
+}
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.scanNetworkCmd(), tickTimerCmd())
+	return tea.Batch(m.scanNetworkCmd(), tickTimerCmd(), tickTelemetryCmd(), m.pollTelemetryCmd())
 }
 
 func (m Model) scanNetworkCmd() tea.Cmd {
@@ -77,14 +90,33 @@ func (m Model) scanNetworkCmd() tea.Cmd {
 	}
 }
 
+func (m Model) pollTelemetryCmd() tea.Cmd {
+	activeDev, ok := m.Registry.GetActive()
+	if !ok || activeDev == nil {
+		return nil
+	}
+	ip := activeDev.IP
+	client := m.client
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer cancel()
+		pilot, err := client.GetPilot(ctx, ip)
+		return TelemetryReceivedMsg{IP: ip, Pilot: pilot, Err: err}
+	}
+}
+
 func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
 	targets := m.Registry.GetSelectedOrActive()
 	if len(targets) == 0 {
 		return nil
 	}
 
-	// Save undo state
+	var ips []string
 	for _, dev := range targets {
+		ips = append(ips, dev.IP)
+
+		// Record undo history
 		prev := wiz.PilotParams{
 			State:   &dev.State,
 			Dimming: &dev.Brightness,
@@ -94,27 +126,20 @@ func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
 			Speed:   &dev.Speed,
 		}
 		m.undoStack[dev.IP] = append(m.undoStack[dev.IP], prev)
-
-		// Optimistically update local model
-		dev.UpdateFromPilot(params)
 	}
 
 	client := m.client
-	var ips []string
-	for _, dev := range targets {
-		ips = append(ips, dev.IP)
-	}
-
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		errs := client.SendBatchCommand(ctx, ips, params)
+
 		for _, err := range errs {
 			if err != nil {
-				return CommandFinishedMsg{Err: err}
+				return CommandFinishedMsg{Err: err, IPs: ips, Params: params}
 			}
 		}
-		return CommandFinishedMsg{Err: nil}
+		return CommandFinishedMsg{Err: nil, IPs: ips, Params: params}
 	}
 }
 
@@ -136,6 +161,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, tickTimerCmd())
 
+	case TelemetryTickMsg:
+		cmds = append(cmds, m.pollTelemetryCmd(), tickTelemetryCmd())
+
+	case TelemetryReceivedMsg:
+		if dev, found := m.Registry.Get(msg.IP); found {
+			if msg.Err == nil && msg.Pilot != nil {
+				dev.UpdateFromPilot(*msg.Pilot)
+				dev.Online = true
+			} else {
+				dev.Online = false
+			}
+		}
+
 	case ScanFinishedMsg:
 		foundCount := 0
 		for _, ip := range msg {
@@ -146,15 +184,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CommandFinishedMsg:
 		if msg.Err != nil {
-			m.statusMessage = fmt.Sprintf("Command failed: %v", msg.Err)
+			m.statusMessage = fmt.Sprintf("⚠️ Light unreachable: %v", msg.Err)
+			for _, ip := range msg.IPs {
+				if dev, found := m.Registry.Get(ip); found {
+					dev.Online = false
+				}
+			}
 		} else {
-			m.statusMessage = "Command executed successfully."
+			m.statusMessage = "✓ Command confirmed by physical light."
+			for _, ip := range msg.IPs {
+				if dev, found := m.Registry.Get(ip); found {
+					dev.UpdateFromPilot(msg.Params)
+					dev.Online = true
+				}
+			}
 		}
 
 	case tea.KeyMsg:
 		key := msg.String()
 
-		// Global escape to Normal Mode
 		if key == "esc" {
 			if m.mode == ModeHelp || m.mode == ModeCommand || m.mode == ModeSearch {
 				m.mode = ModeNormal
@@ -190,11 +238,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
-	// Handle numbers 1-9 for direct favorite scene shortcuts
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		sceneID := int(key[0] - '0')
 		scene := wiz.GetSceneByID(sceneID)
-		m.statusMessage = fmt.Sprintf("Activated Scene: %s", scene.Name)
+		m.statusMessage = fmt.Sprintf("Sending Scene: %s...", scene.Name)
 		return m, m.dispatchPilotCmd(wiz.NewSceneParams(sceneID))
 	}
 
@@ -264,7 +311,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 			scenes := wiz.FilterScenes(m.searchQuery)
 			if m.sceneCursor >= 0 && m.sceneCursor < len(scenes) {
 				sc := scenes[m.sceneCursor]
-				m.statusMessage = fmt.Sprintf("Activated Scene: %s", sc.Name)
+				m.statusMessage = fmt.Sprintf("Sending Scene: %s...", sc.Name)
 				return m, m.dispatchPilotCmd(wiz.NewSceneParams(sc.ID))
 			}
 		}
@@ -307,7 +354,6 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		}
 
 	case "t":
-		// Set 15-minute countdown sleep timer
 		m.sleepTimerSecs = 15 * 60
 		m.statusMessage = "Sleep timer set: 15 minutes."
 		return m, nil
@@ -522,7 +568,6 @@ func (m Model) View() string {
 		return views.RenderHelpOverlay(m.width, m.height)
 	}
 
-	// Auto-scaling responsive layout calculations
 	sideWidth := clamp(int(float64(m.width)*0.30), 22, 36)
 	mainWidth := max(m.width-sideWidth-6, 30)
 	contentHeight := max(m.height-4, 12)

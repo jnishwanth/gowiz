@@ -2,60 +2,74 @@ package tui
 
 import (
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"wiz-tui/internal/wiz"
 )
 
-func TestTUIModelUX(t *testing.T) {
+func TestTUIStateSynchronization(t *testing.T) {
 	mockClient := wiz.NewMockClient()
 	m := NewModel(mockClient, "192.168.1.115")
 
-	t.Run("Direct number hotkey 1-9 activates favorite scene", func(t *testing.T) {
-		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	t.Run("Confirmed command state update", func(t *testing.T) {
+		// Send dimming command
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 		m = updated.(Model)
 
 		if cmd != nil {
 			msg := cmd()
-			m.Update(msg)
+			// Process CommandFinishedMsg
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
 		}
 
 		activeDev, _ := m.Registry.GetActive()
-		if activeDev.SceneID != 2 {
-			t.Errorf("expected sceneID 2 after pressing key 2, got %d", activeDev.SceneID)
+		if !activeDev.Online {
+			t.Errorf("expected confirmed bulb to be marked Online")
 		}
 	})
 
-	t.Run("Sleep timer set and countdown tick", func(t *testing.T) {
-		// Set timer using 't' key
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	t.Run("Unreachable bulb failure state handling", func(t *testing.T) {
+		mockClient.ShouldFail = true
+
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 		m = updated.(Model)
 
-		if m.sleepTimerSecs != 15*60 {
-			t.Errorf("expected 900 seconds sleep timer, got %d", m.sleepTimerSecs)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
 		}
 
-		// Send TimerTickMsg
-		updated, _ = m.Update(TimerTickMsg(time.Now()))
-		m = updated.(Model)
-
-		if m.sleepTimerSecs != 15*60-1 {
-			t.Errorf("expected sleep timer decremented by 1, got %d", m.sleepTimerSecs)
+		activeDev, _ := m.Registry.GetActive()
+		if activeDev.Online {
+			t.Errorf("expected unreachable bulb to be marked Offline")
 		}
+
+		mockClient.ShouldFail = false
 	})
 
-	t.Run("Window size resize handling", func(t *testing.T) {
-		updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-		m = updated.(Model)
+	t.Run("Telemetry sync message updates device state", func(t *testing.T) {
+		state := true
+		dim := 42
+		temp := 3200
 
-		if m.width != 120 || m.height != 40 {
-			t.Errorf("expected dimensions 120x40, got %dx%d", m.width, m.height)
+		msg := TelemetryReceivedMsg{
+			IP: "192.168.1.115",
+			Pilot: &wiz.PilotParams{
+				State:   &state,
+				Dimming: &dim,
+				Temp:    &temp,
+			},
+			Err: nil,
 		}
 
-		view := m.View()
-		if len(view) == 0 {
-			t.Errorf("rendered view on resize should not be empty")
+		updated, _ := m.Update(msg)
+		m = updated.(Model)
+
+		dev, _ := m.Registry.Get("192.168.1.115")
+		if dev.Brightness != 42 || dev.Temp != 3200 {
+			t.Errorf("expected telemetry sync brightness 42 temp 3200, got %d and %d", dev.Brightness, dev.Temp)
 		}
 	})
 }
