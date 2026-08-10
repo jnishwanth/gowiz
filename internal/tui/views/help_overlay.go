@@ -9,32 +9,31 @@ import (
 
 func RenderHelpOverlay(width, height int) string {
 	var sb strings.Builder
-	sb.WriteString(styles.AppTitleStyle.Render("⌨  gowiz Ergonomic Keyboard Reference") + "\n\n")
+	sb.WriteString(styles.AppTitleStyle.Render("⌨  gowiz Keyboard Reference") + "\n\n")
 
 	sections := []struct {
 		Title string
 		Keys  [][2]string
 	}{
 		{
-			Title: "Navigation & Panel Focus",
+			Title: "Navigation & Focus",
 			Keys: [][2]string{
-				{"Tab / Shift+Tab", "Cycle focus (Bulbs / Control Center / Scenes)"},
-				{"j / k  or  ↓ / ↑", "Move selection up / down"},
-				{"h / l  or  ← / →", "Adjust brightness (-10% / +10%)"},
-				{"g / G  or  Home/End", "Jump to top / bottom of list"},
+				{"Tab / Shift+Tab", "Cycle active panel (Bulbs ➔ Controls ➔ Scenes)"},
+				{"j / k  or  ↓ / ↑", "Move selection up / down (Adjust brightness when in Controls)"},
+				{"h / l  or  ← / →", "Adjust brightness (-10% / +10%) / Dynamic speed"},
+				{"Home / End", "Jump to top / bottom of list"},
 			},
 		},
 		{
-			Title: "Direct Hotkeys & Controls",
+			Title: "Light Controls & Shortcuts",
 			Keys: [][2]string{
 				{"Space", "Instant Power Toggle (ON / OFF)"},
-				{"Enter", "Activate highlighted scene or target light"},
+				{"Enter", "Apply highlighted scene or target light"},
 				{"1 - 9", "Instant trigger favorite WiZ dynamic scenes"},
 				{"t", "Start 15-minute countdown Sleep Timer"},
-				{"[ / ]", "Decrease / Increase dynamic scene speed"},
-				{"r / g / b", "Quick RGB Red / Green / Blue"},
-				{"w / c", "Warm White (2700K) / Cozy Amber (2200K)"},
+				{"[ / ]", "Decrease / Increase dynamic scene animation speed"},
 				{"u", "Undo last state change"},
+				{"R", "Rescan local network for WiZ devices"},
 			},
 		},
 		{
@@ -47,7 +46,7 @@ func RenderHelpOverlay(width, height int) string {
 			},
 		},
 		{
-			Title: "Command Mode (:) & Instant Search (/)",
+			Title: "Command Mode (:) & Search (/)",
 			Keys: [][2]string{
 				{":scene <name|id>", "Activate dynamic scene (e.g. :scene sunset)"},
 				{":temp <2200-6500>", "Set Color Temperature in Kelvin"},
@@ -55,7 +54,7 @@ func RenderHelpOverlay(width, height int) string {
 				{":dim <10-100>", "Set exact dimming percentage"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
 				{":scan", "Rescan subnet for WiZ devices"},
-				{"/ <query>", "Instant search / filter 32 dynamic WiZ scenes"},
+				{"/ <query>", "Instant search / filter dynamic scenes"},
 				{":q / q", "Quit gowiz"},
 			},
 		},

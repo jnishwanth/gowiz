@@ -387,17 +387,6 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.dispatchPilotCmd(wiz.NewSceneParams(active.SceneID, newSp))
 		}
 
-	case "r":
-		return m, m.dispatchPilotCmd(wiz.NewRGBParams(255, 0, 0))
-	case "g":
-		return m, m.dispatchPilotCmd(wiz.NewRGBParams(0, 255, 0))
-	case "b":
-		return m, m.dispatchPilotCmd(wiz.NewRGBParams(0, 0, 255))
-	case "w":
-		return m, m.dispatchPilotCmd(wiz.NewTempParams(2700))
-	case "c":
-		return m, m.dispatchPilotCmd(wiz.NewTempParams(2200))
-
 	case "a":
 		if m.mode == ModeVisual {
 			m.Registry.SelectAll()
@@ -595,14 +584,14 @@ func (m Model) View() string {
 		return views.RenderHelpOverlay(m.width, m.height)
 	}
 
-	sideWidth := clamp(int(float64(m.width)*0.30), 22, 36)
-	mainWidth := max(m.width-sideWidth-6, 30)
-	contentHeight := max(m.height-4, 12)
+	sideWidth := clamp(int(float64(m.width)*0.28), 22, 34)
+	mainWidth := max(m.width-sideWidth-4, 28)
+	contentHeight := max(m.height-3, 10)
 
 	leftCol := views.RenderDeviceList(m.Registry, m.deviceCursor, m.activePanel == PanelDevices, sideWidth, contentHeight)
 
-	controlHeight := int(float64(contentHeight) * 0.45)
-	sceneHeight := contentHeight - controlHeight - 2
+	controlHeight := int(float64(contentHeight) * 0.40)
+	sceneHeight := contentHeight - controlHeight
 
 	activeDev, _ := m.Registry.GetActive()
 	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, controlHeight)

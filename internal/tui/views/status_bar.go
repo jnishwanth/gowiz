@@ -10,22 +10,6 @@ import (
 )
 
 func RenderStatusBar(mode string, activePanelStr string, activeDev *wiz.Device, selectedCount int, commandBuf string, statusMsg string, width int) string {
-	var modeBadge string
-	switch mode {
-	case "NORMAL":
-		modeBadge = styles.NormalModeBadge.Render(" NORMAL ")
-	case "VISUAL":
-		modeBadge = styles.VisualModeBadge.Render(" VISUAL ")
-	case "COMMAND":
-		modeBadge = styles.CommandModeBadge.Render(" COMMAND ")
-	case "SEARCH":
-		modeBadge = styles.SearchPromptStyle.Render(" SEARCH ")
-	case "HELP":
-		modeBadge = styles.HelpModeBadge.Render(" HELP ")
-	default:
-		modeBadge = styles.NormalModeBadge.Render(" " + mode + " ")
-	}
-
 	focusPill := lipgloss.NewStyle().Background(styles.Surface0).Foreground(styles.Yellow).Bold(true).Padding(0, 1).Render(fmt.Sprintf("Focus: %s", activePanelStr))
 
 	targetStr := "Target: None"
@@ -46,15 +30,15 @@ func RenderStatusBar(mode string, activePanelStr string, activeDev *wiz.Device, 
 	} else if statusMsg != "" {
 		middleText = styles.StatusInfo.Render(statusMsg)
 	} else {
-		middleText = styles.DimText.Render("[Tab] Switch Panel • [Space] Power • [1-9] Scenes • [:] Command")
+		middleText = styles.DimText.Render("[Tab] Switch Panel • [Space] Power • [1-9] Scenes • [:] Command • [?] Help")
 	}
 
-	left := modeBadge + " " + focusPill + " " + targetPill
+	left := focusPill + " " + targetPill
 	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.3")
 
 	availWidth := width - lipgloss.Width(left) - lipgloss.Width(right) - 4
 	if availWidth < 5 {
-		return modeBadge + " " + focusPill
+		return focusPill + " " + targetPill
 	}
 
 	midTruncated := lipgloss.NewStyle().MaxWidth(availWidth).Render(middleText)

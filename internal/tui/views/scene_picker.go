@@ -27,7 +27,7 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 	if len(scenes) == 0 {
 		sb.WriteString(styles.DimText.Render("No scenes match query.\nPress [Esc] to clear filter."))
 	} else {
-		maxLines := max(height-5, 4)
+		maxLines := max(height-4, 3)
 
 		for i, scene := range scenes {
 			if i >= maxLines {
@@ -39,7 +39,6 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 			isCursor := isFocused && i == sceneCursor
 			isActiveOnLight := scene.ID == activeSceneID
 
-			// Swatch pill pulsates only when Dynamic Scenes panel is focused; frozen when unfocused
 			swatchHex := scene.AccentColor
 			if isFocused {
 				swatchHex = scene.GetAccentColor(animFrame)
@@ -51,7 +50,6 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
 			}
 
-			// Clean, standard text for scene name (no color changing on text since swatch pill is present)
 			nameStr := lipgloss.NewStyle().MaxWidth(max(width-30, 8)).Render(scene.Name)
 			nameBadge := fmt.Sprintf("%s %-12s", shortcut, nameStr)
 
@@ -71,10 +69,6 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + "\n")
 			}
 		}
-
-		if isFocused {
-			sb.WriteString("\n" + styles.DimText.Render("💡 Press [j/k] to navigate • [Enter/Space] to Apply scene to bulb"))
-		}
 	}
 
 	panelStyle := styles.PanelStyle
@@ -84,6 +78,6 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 
 	return panelStyle.
 		Width(max(width-2, 20)).
-		Height(max(height-2, 6)).
+		Height(max(height-2, 5)).
 		Render(sb.String())
 }

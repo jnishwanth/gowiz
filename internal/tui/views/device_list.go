@@ -25,7 +25,7 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 	if len(devices) == 0 {
 		sb.WriteString(styles.DimText.Render("No WiZ lights.\nPress [R] to scan."))
 	} else {
-		maxLines := max(height-5, 4)
+		maxLines := max(height-4, 3)
 
 		for i, dev := range devices {
 			if i >= maxLines {
@@ -65,10 +65,6 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + "\n")
 			}
 		}
-
-		if isFocused {
-			sb.WriteString("\n" + styles.DimText.Render("💡 [j/k] Move • [Enter] Target • [Space] Power/Select"))
-		}
 	}
 
 	panelStyle := styles.PanelStyle
@@ -78,6 +74,6 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 
 	return panelStyle.
 		Width(max(width-2, 15)).
-		Height(max(height-2, 6)).
+		Height(max(height-2, 5)).
 		Render(sb.String())
 }
