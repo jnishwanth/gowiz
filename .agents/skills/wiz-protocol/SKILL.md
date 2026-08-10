@@ -22,7 +22,7 @@ WiZ smart lights communicate locally over unencrypted JSON-RPC 1.0 via UDP port 
     "g": 100,
     "b": 50,
     "temp": 2700,
-    "sceneId": 2,
+    "sceneId": 3,
     "speed": 100
   }
 }
@@ -44,56 +44,49 @@ WiZ smart lights communicate locally over unencrypted JSON-RPC 1.0 via UDP port 
     "mac": "a8bb50123456",
     "rssi": -62,
     "state": true,
-    "sceneId": 2,
+    "sceneId": 3,
     "speed": 100,
     "dimming": 80
   }
 }
 ```
 
-### 3. `getSystemConfig` (Network Discovery)
-Broadcast payload sent to subnet broadcast IP (e.g., `192.168.1.255:38899`):
-```json
-{
-  "method": "getSystemConfig",
-  "params": {}
-}
-```
-
-## WiZ Dynamic Scenes Reference (IDs 1-32)
-WiZ supports 32 dynamic lighting effects activated via `"sceneId"`:
+## WiZ Dynamic Scenes Reference (Official IDs)
+WiZ supports built-in dynamic lighting effects activated via `"sceneId"`:
 - **1**: Ocean
-- **2**: Sunset
-- **3**: Party
-- **4**: Fireplace
-- **5**: Cozy
-- **6**: Forest
-- **7**: Pastel Colors
-- **8**: Wake up
-- **9**: Bedtime
-- **10**: Warm White (2700K)
-- **11**: Daylight (6500K)
-- **12**: Cool White (4000K)
-- **13**: Night Light
-- **14**: Focus
-- **15**: Relax
-- **16**: True colors
-- **17**: TV time
-- **18**: Plant growth
-- **19**: Spring
-- **20**: Summer
-- **21**: Fall
-- **22**: Deep dive
-- **23**: Jungle
-- **24**: Mojito
-- **25**: Club
-- **26**: Christmas
-- **27**: Halloween
-- **28**: Candlelight
-- **29**: Golden white
-- **30**: Pulse
-- **31**: Steampunk
-- **32**: Rhythm
+- **2**: Romance
+- **3**: Sunset
+- **4**: Party
+- **5**: Fireplace
+- **6**: Cozy
+- **7**: Forest
+- **8**: Pastel colors
+- **9**: Wake-up
+- **10**: Bedtime
+- **11**: Warm white (2700K)
+- **12**: Daylight (6500K)
+- **13**: Cool white (4000K)
+- **14**: Night light
+- **15**: Focus
+- **16**: Relax
+- **17**: True colors
+- **18**: TV time
+- **19**: Plant growth
+- **20**: Spring
+- **21**: Summer
+- **22**: Fall
+- **23**: Deep dive
+- **24**: Jungle
+- **25**: Mojito
+- **26**: Club
+- **27**: Christmas
+- **28**: Halloween
+- **29**: Candlelight
+- **30**: Golden white
+- **31**: Pulse
+- **32**: Steampunk
+- **33**: Diwali
+- **1000**: Rhythm
 
 ## Verification Workflow
 Always run:

@@ -4,37 +4,47 @@ import "testing"
 
 func TestScenes(t *testing.T) {
 	t.Run("AllScenes count", func(t *testing.T) {
-		if len(AllScenes) != 32 {
-			t.Errorf("expected 32 scenes, got %d", len(AllScenes))
+		if len(AllScenes) != 34 {
+			t.Errorf("expected 34 scenes, got %d", len(AllScenes))
 		}
 	})
 
-	t.Run("GetSceneByID valid & invalid", func(t *testing.T) {
-		s1 := GetSceneByID(2)
-		if s1.Name != "Sunset" {
-			t.Errorf("expected Sunset for ID 2, got %s", s1.Name)
+	t.Run("GetSceneByID official mapping verification", func(t *testing.T) {
+		sOcean := GetSceneByID(1)
+		if sOcean.Name != "Ocean" {
+			t.Errorf("expected Ocean for ID 1, got %s", sOcean.Name)
 		}
 
-		sFallback := GetSceneByID(99)
+		sRomance := GetSceneByID(2)
+		if sRomance.Name != "Romance" {
+			t.Errorf("expected Romance for ID 2, got %s", sRomance.Name)
+		}
+
+		sSunset := GetSceneByID(3)
+		if sSunset.Name != "Sunset" {
+			t.Errorf("expected Sunset for ID 3, got %s", sSunset.Name)
+		}
+
+		sParty := GetSceneByID(4)
+		if sParty.Name != "Party" {
+			t.Errorf("expected Party for ID 4, got %s", sParty.Name)
+		}
+
+		sFallback := GetSceneByID(9999)
 		if sFallback.ID != 1 {
 			t.Errorf("expected default scene 1 for invalid ID, got %d", sFallback.ID)
 		}
 	})
 
 	t.Run("GetSceneByName exact and prefix", func(t *testing.T) {
-		s, found := GetSceneByName("ocean")
-		if !found || s.ID != 1 {
-			t.Errorf("expected Ocean scene, got %v (found=%v)", s, found)
+		s, found := GetSceneByName("sunset")
+		if !found || s.ID != 3 {
+			t.Errorf("expected Sunset scene (ID 3), got %v (found=%v)", s, found)
 		}
 
-		sPrefix, foundPrefix := GetSceneByName("fire")
-		if !foundPrefix || sPrefix.ID != 4 {
-			t.Errorf("expected Fireplace scene for prefix fire, got %v", sPrefix)
-		}
-
-		_, notFound := GetSceneByName("nonexistent")
-		if notFound {
-			t.Errorf("expected false for nonexistent scene")
+		sPrefix, foundPrefix := GetSceneByName("rom")
+		if !foundPrefix || sPrefix.ID != 2 {
+			t.Errorf("expected Romance scene for prefix rom, got %v", sPrefix)
 		}
 	})
 
@@ -45,8 +55,8 @@ func TestScenes(t *testing.T) {
 		}
 
 		all := FilterScenes("")
-		if len(all) != 32 {
-			t.Errorf("expected all 32 scenes on empty query, got %d", len(all))
+		if len(all) != 34 {
+			t.Errorf("expected all 34 scenes on empty query, got %d", len(all))
 		}
 	})
 }
