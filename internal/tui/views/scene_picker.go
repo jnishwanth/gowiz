@@ -39,18 +39,23 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 			isCursor := isFocused && i == sceneCursor
 			isActiveOnLight := scene.ID == activeSceneID
 
-			currentHex := scene.GetAccentColor(animFrame)
-			accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(currentHex)).Bold(true)
+			// Swatch pill pulsates only when Dynamic Scenes panel is focused; frozen when unfocused
+			swatchHex := scene.AccentColor
+			if isFocused {
+				swatchHex = scene.GetAccentColor(animFrame)
+			}
+			swatchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(swatchHex)).Bold(true)
 
 			shortcut := "   "
 			if scene.ID >= 1 && scene.ID <= 9 {
 				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
 			}
 
+			// Clean, standard text for scene name (no color changing on text since swatch pill is present)
 			nameStr := lipgloss.NewStyle().MaxWidth(max(width-30, 8)).Render(scene.Name)
-			nameBadge := accentStyle.Render(fmt.Sprintf("%s %-12s", shortcut, nameStr))
+			nameBadge := fmt.Sprintf("%s %-12s", shortcut, nameStr)
 
-			swatch := accentStyle.Render("████")
+			swatch := swatchStyle.Render("████")
 
 			activeBadge := ""
 			if isActiveOnLight {
@@ -63,7 +68,7 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 				applyHint := styles.StatusSuccess.Render(" ↵ Press Enter to Apply")
 				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line+applyHint) + "\n")
 			} else {
-				sb.WriteString("  " + line + "\n")
+				sb.WriteString("  " + styles.UnselectedItemStyle.Render(line) + "\n")
 			}
 		}
 
