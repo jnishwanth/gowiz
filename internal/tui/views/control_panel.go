@@ -83,8 +83,8 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 			sb.WriteString(fmt.Sprintf("\nRGB Color: %s (R:%d G:%d B:%d)\n", rgbSwatch, dev.RGB[0], dev.RGB[1], dev.RGB[2]))
 		}
 
-		if height > 12 {
-			sb.WriteString("\n" + styles.DimText.Render("Hotkeys: [Space] Power • [1-9] Scenes • [t] Timer • [←/→] Dim"))
+		if isFocused {
+			sb.WriteString("\n" + styles.DimText.Render("💡 [j/k] Brightness • [h/l] Speed/Temp • [Space] Power"))
 		}
 	}
 
