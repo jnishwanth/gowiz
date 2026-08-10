@@ -45,3 +45,16 @@ func (p Panel) Prev() Panel {
 	}
 	return p - 1
 }
+
+func (p Panel) String() string {
+	switch p {
+	case PanelDevices:
+		return "1. Bulbs"
+	case PanelControl:
+		return "2. Controls"
+	case PanelScenes:
+		return "3. Scenes"
+	default:
+		return "Unknown"
+	}
+}

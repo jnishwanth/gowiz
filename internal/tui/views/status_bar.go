@@ -9,7 +9,7 @@ import (
 	"wiz-tui/internal/wiz"
 )
 
-func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, commandBuf string, statusMsg string, width int) string {
+func RenderStatusBar(mode string, activePanelStr string, activeDev *wiz.Device, selectedCount int, commandBuf string, statusMsg string, width int) string {
 	var modeBadge string
 	switch mode {
 	case "NORMAL":
@@ -26,9 +26,11 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 		modeBadge = styles.NormalModeBadge.Render(" " + mode + " ")
 	}
 
+	focusPill := lipgloss.NewStyle().Background(styles.Surface0).Foreground(styles.Yellow).Bold(true).Padding(0, 1).Render(fmt.Sprintf("Focus: %s", activePanelStr))
+
 	targetStr := "Target: None"
 	if selectedCount > 0 {
-		targetStr = fmt.Sprintf("Selected: %d bulbs", selectedCount)
+		targetStr = fmt.Sprintf("Selected: %d", selectedCount)
 	} else if activeDev != nil {
 		targetStr = activeDev.IP
 	}
@@ -44,15 +46,15 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 	} else if statusMsg != "" {
 		middleText = styles.StatusInfo.Render(statusMsg)
 	} else {
-		middleText = styles.DimText.Render("[:] cmd • [/] search • [?] help • [Space] power • [1-9] scenes")
+		middleText = styles.DimText.Render("[Tab] Switch Panel • [Space] Power • [1-9] Scenes • [:] Command")
 	}
 
-	left := modeBadge + " " + targetPill
-	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.2")
+	left := modeBadge + " " + focusPill + " " + targetPill
+	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.3")
 
 	availWidth := width - lipgloss.Width(left) - lipgloss.Width(right) - 4
 	if availWidth < 5 {
-		return modeBadge + " " + targetPill
+		return modeBadge + " " + focusPill
 	}
 
 	midTruncated := lipgloss.NewStyle().MaxWidth(availWidth).Render(middleText)

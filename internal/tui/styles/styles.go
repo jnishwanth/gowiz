@@ -32,16 +32,16 @@ var (
 )
 
 var (
-	// Panel styles
+	// Panel styles - High Contrast Focused vs Unfocused
 	PanelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(Mauve).
+			BorderForeground(Overlay0).
 			Background(Base).
 			Padding(1, 2)
 
 	ActivePanelStyle = lipgloss.NewStyle().
 				Border(lipgloss.DoubleBorder()).
-				BorderForeground(Lavender).
+				BorderForeground(Yellow).
 				Background(Base).
 				Padding(1, 2)
 
@@ -56,6 +56,13 @@ var (
 				Bold(true).
 				Foreground(Blue).
 				MarginBottom(1)
+
+	FocusedSectionTitleStyle = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(Crust).
+					Background(Yellow).
+					Padding(0, 1).
+					MarginBottom(1)
 
 	// Mode Pills (Vim Status)
 	NormalModeBadge = lipgloss.NewStyle().

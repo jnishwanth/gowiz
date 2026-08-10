@@ -17,7 +17,12 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, an
 	if filterQuery != "" {
 		title += fmt.Sprintf(" [Filter: %s]", filterQuery)
 	}
-	sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n")
+	if isFocused {
+		title += " [ACTIVE]"
+		sb.WriteString(styles.FocusedSectionTitleStyle.Render(title) + "\n")
+	} else {
+		sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n")
+	}
 
 	if len(scenes) == 0 {
 		sb.WriteString(styles.DimText.Render("No scenes match query.\nPress [Esc] to clear filter."))
@@ -33,7 +38,6 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, an
 
 			isCurrent := scene.ID == activeSceneID
 
-			// Dynamic color shifting swatch mimicking actual bulb light output
 			currentHex := scene.GetAccentColor(animFrame)
 			accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(currentHex)).Bold(true)
 
@@ -50,7 +54,6 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, an
 			nameStr := lipgloss.NewStyle().MaxWidth(max(width-28, 8)).Render(scene.Name)
 			nameBadge := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true).Render(fmt.Sprintf("%s %-13s", shortcut, nameStr))
 
-			// Live animated bulb output color swatch
 			swatch := accentStyle.Render("████")
 
 			desc := ""

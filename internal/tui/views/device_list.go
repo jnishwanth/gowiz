@@ -14,7 +14,13 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 	activeDev, _ := reg.GetActive()
 
 	var sb strings.Builder
-	sb.WriteString(styles.SectionTitleStyle.Render("⚡ Bulbs") + "\n\n")
+	title := "⚡ Bulbs"
+	if isFocused {
+		title += " [ACTIVE]"
+		sb.WriteString(styles.FocusedSectionTitleStyle.Render(title) + "\n\n")
+	} else {
+		sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n\n")
+	}
 
 	if len(devices) == 0 {
 		sb.WriteString(styles.DimText.Render("No WiZ lights.\nPress [R] to scan."))

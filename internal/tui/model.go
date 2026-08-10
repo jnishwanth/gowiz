@@ -436,6 +436,12 @@ func (m Model) navigateDown() (Model, tea.Cmd) {
 		if len(scenes) > 0 {
 			m.sceneCursor = (m.sceneCursor + 1) % len(scenes)
 		}
+	} else if m.activePanel == PanelControl {
+		active, ok := m.Registry.GetActive()
+		if ok {
+			newDim := active.Brightness - 10
+			return m, m.dispatchPilotCmd(wiz.NewDimmingParams(newDim))
+		}
 	}
 	return m, nil
 }
@@ -457,6 +463,12 @@ func (m Model) navigateUp() (Model, tea.Cmd) {
 			if m.sceneCursor < 0 {
 				m.sceneCursor = len(scenes) - 1
 			}
+		}
+	} else if m.activePanel == PanelControl {
+		active, ok := m.Registry.GetActive()
+		if ok {
+			newDim := active.Brightness + 10
+			return m, m.dispatchPilotCmd(wiz.NewDimmingParams(newDim))
 		}
 	}
 	return m, nil
@@ -613,6 +625,7 @@ func (m Model) View() string {
 
 	statusBar := views.RenderStatusBar(
 		m.mode.String(),
+		m.activePanel.String(),
 		activeDev,
 		selectedCount,
 		m.commandBuffer,
