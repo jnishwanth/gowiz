@@ -98,7 +98,7 @@ func NewTempParams(temp int) PilotParams {
 }
 
 func NewSceneParams(sceneID int, speed ...int) PilotParams {
-	if sceneID < 1 || sceneID > 32 {
+	if (sceneID < 1 || sceneID > 33) && sceneID != 1000 {
 		sceneID = 1
 	}
 	state := true
