@@ -155,9 +155,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sleepTimerSecs > 0 {
 			m.sleepTimerSecs--
 			if m.sleepTimerSecs == 0 {
-				m.statusMessage = "Sleep timer expired. Turning off lights."
+				m.setStatusMessage("Sleep timer expired. Turning off lights.")
 				cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
 			}
+		}
+		if m.statusMessage != "" && time.Since(m.statusTimer) > 4*time.Second {
+			m.statusMessage = ""
 		}
 		cmds = append(cmds, tickTimerCmd())
 
@@ -608,6 +611,11 @@ func (m Model) View() string {
 	titleBar := styles.AppTitleStyle.Render("⚡ gowiz - WiZ Smart Light Controller")
 
 	return lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusBar)
+}
+
+func (m *Model) setStatusMessage(msg string) {
+	m.statusMessage = msg
+	m.statusTimer = time.Now()
 }
 
 func clamp(val, min, max int) int {

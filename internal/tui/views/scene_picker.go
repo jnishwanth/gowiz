@@ -22,13 +22,12 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 	if len(scenes) == 0 {
 		sb.WriteString(styles.DimText.Render("No scenes match query.\nPress [Esc] to clear filter."))
 	} else {
-		// Calculate available lines based on height
 		maxLines := max(height-4, 5)
 
 		for i, scene := range scenes {
 			if i >= maxLines {
 				moreCount := len(scenes) - i
-				sb.WriteString(styles.DimText.Render(fmt.Sprintf("... and %d more scenes (use j/k to scroll)", moreCount)) + "\n")
+				sb.WriteString(styles.DimText.Render(fmt.Sprintf("... +%d more scenes (use j/k to scroll)", moreCount)) + "\n")
 				break
 			}
 
@@ -45,15 +44,15 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
 			}
 
-			nameStr := lipgloss.NewStyle().MaxWidth(max(width-22, 10)).Render(scene.Name)
+			nameStr := lipgloss.NewStyle().MaxWidth(max(width-24, 8)).Render(scene.Name)
 			badge := accentStyle.Render(fmt.Sprintf("%s %-12s", shortcut, nameStr))
 
-			catStr := ""
-			if width > 45 {
-				catStr = " " + styles.DimText.Render("("+scene.Category+")")
+			catPill := ""
+			if width > 42 {
+				catPill = " " + renderCategoryPill(scene.Category)
 			}
 
-			sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, badge, catStr))
+			sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, badge, catPill))
 		}
 	}
 
@@ -66,4 +65,25 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 		Width(max(width-2, 20)).
 		Height(max(height-2, 6)).
 		Render(sb.String())
+}
+
+func renderCategoryPill(cat string) string {
+	switch cat {
+	case "Nature":
+		return styles.CategoryNature.Render("Nature")
+	case "Cozy":
+		return styles.CategoryCozy.Render("Cozy")
+	case "Dynamic":
+		return styles.CategoryDynamic.Render("Dynamic")
+	case "White":
+		return styles.CategoryWhite.Render("White")
+	case "Seasons":
+		return styles.CategorySeasons.Render("Seasons")
+	case "Festive":
+		return styles.CategoryFestive.Render("Festive")
+	case "Special":
+		return styles.CategorySpecial.Render("Special")
+	default:
+		return styles.DimText.Render("(" + cat + ")")
+	}
 }

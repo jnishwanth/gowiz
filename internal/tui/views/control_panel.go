@@ -17,20 +17,26 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 	if dev == nil {
 		sb.WriteString(styles.DimText.Render("No active device selected."))
 	} else {
-		powerStatus := styles.StatusSuccess.Render("ON  [Space/o]")
+		powerStatus := styles.StatusSuccess.Render("● ON  [Space/o]")
 		if !dev.State {
-			powerStatus = styles.StatusError.Render("OFF [Space/f]")
+			powerStatus = styles.StatusError.Render("○ OFF [Space/f]")
 		}
 
 		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(dev.IP)
-		sb.WriteString(fmt.Sprintf("Target: %s  |  State: %s\n", targetIP, powerStatus))
+		rssiStr := "📶 Online"
+		if dev.Rssi != 0 {
+			rssiStr = fmt.Sprintf("📶 %d dBm", dev.Rssi)
+		}
+		rssiPill := lipgloss.NewStyle().Foreground(styles.Subtext0).Render(rssiStr)
+
+		sb.WriteString(fmt.Sprintf("%s  │  %s  │  %s\n", targetIP, powerStatus, rssiPill))
 
 		// Sleep Countdown Badge if running
 		if sleepTimerSecs > 0 {
 			mins := sleepTimerSecs / 60
 			secs := sleepTimerSecs % 60
-			timerBadge := lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep Timer: %02d:%02d", mins, secs))
-			sb.WriteString(timerBadge + "\n")
+			timerBadge := lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep Timer: %02d:%02d remaining", mins, secs))
+			sb.WriteString("\n" + timerBadge + "\n")
 		}
 
 		// Brightness Bar
@@ -42,7 +48,7 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 		p.EmptyColor = string(styles.Surface0)
 		sb.WriteString(p.ViewAs(float64(dev.Brightness)/100.0) + "\n")
 
-		// Mode Specific Display (Scene / White Temp Gradient / RGB Swatch)
+		// Mode Specific Display (Scene / White Temp Gradient / Rich RGB Swatch)
 		if dev.SceneID > 0 {
 			scene := wiz.GetSceneByID(dev.SceneID)
 			accent := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true).Render(scene.Name)
@@ -67,8 +73,8 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 			sb.WriteString("2200K 🟨 " + cctBar.ViewAs(kelvinRatio) + " 🟦 6500K\n")
 		} else {
 			hexColor := fmt.Sprintf("#%02x%02x%02x", dev.RGB[0], dev.RGB[1], dev.RGB[2])
-			rgbPill := lipgloss.NewStyle().Foreground(lipgloss.Color(hexColor)).Bold(true).Render("████ " + hexColor)
-			sb.WriteString(fmt.Sprintf("\nRGB Color: %s (R:%d G:%d B:%d)\n", rgbPill, dev.RGB[0], dev.RGB[1], dev.RGB[2]))
+			rgbSwatch := lipgloss.NewStyle().Foreground(lipgloss.Color(hexColor)).Bold(true).Render("████████ " + hexColor)
+			sb.WriteString(fmt.Sprintf("\nRGB Color: %s (R:%d G:%d B:%d)\n", rgbSwatch, dev.RGB[0], dev.RGB[1], dev.RGB[2]))
 		}
 
 		if height > 12 {

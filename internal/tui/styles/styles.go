@@ -88,6 +88,15 @@ var (
 			Background(Teal).
 			Padding(0, 1)
 
+	// Scene Category Badges
+	CategoryNature  = lipgloss.NewStyle().Foreground(Crust).Background(Green).Padding(0, 1).Bold(true)
+	CategoryCozy    = lipgloss.NewStyle().Foreground(Crust).Background(Peach).Padding(0, 1).Bold(true)
+	CategoryDynamic = lipgloss.NewStyle().Foreground(Crust).Background(Mauve).Padding(0, 1).Bold(true)
+	CategoryWhite   = lipgloss.NewStyle().Foreground(Crust).Background(Sky).Padding(0, 1).Bold(true)
+	CategorySeasons = lipgloss.NewStyle().Foreground(Crust).Background(Yellow).Padding(0, 1).Bold(true)
+	CategoryFestive = lipgloss.NewStyle().Foreground(Crust).Background(Red).Padding(0, 1).Bold(true)
+	CategorySpecial = lipgloss.NewStyle().Foreground(Crust).Background(Pink).Padding(0, 1).Bold(true)
+
 	// Item selections
 	SelectedItemStyle = lipgloss.NewStyle().
 				Bold(true).

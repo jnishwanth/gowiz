@@ -19,7 +19,7 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 	case "COMMAND":
 		modeBadge = styles.CommandModeBadge.Render(" COMMAND ")
 	case "SEARCH":
-		modeBadge = styles.SearchModeBadge.Render(" SEARCH ")
+		modeBadge = styles.SearchPromptStyle.Render(" SEARCH ")
 	case "HELP":
 		modeBadge = styles.HelpModeBadge.Render(" HELP ")
 	default:
@@ -28,7 +28,7 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 
 	targetStr := "Target: None"
 	if selectedCount > 0 {
-		targetStr = fmt.Sprintf("Selected: %d", selectedCount)
+		targetStr = fmt.Sprintf("Selected: %d bulbs", selectedCount)
 	} else if activeDev != nil {
 		targetStr = activeDev.IP
 	}
@@ -39,6 +39,8 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 		middleText = styles.CommandPromptStyle.Render(":") + commandBuf
 	} else if mode == "SEARCH" {
 		middleText = styles.SearchPromptStyle.Render("/") + commandBuf
+	} else if mode == "VISUAL" {
+		middleText = styles.StatusWarning.Render("[Space] Toggle Check • [a] Select All • [o/x] Power • [1-9] Scenes")
 	} else if statusMsg != "" {
 		middleText = styles.StatusInfo.Render(statusMsg)
 	} else {
@@ -46,7 +48,7 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 	}
 
 	left := modeBadge + " " + targetPill
-	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.1")
+	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.2")
 
 	availWidth := width - lipgloss.Width(left) - lipgloss.Width(right) - 4
 	if availWidth < 5 {
