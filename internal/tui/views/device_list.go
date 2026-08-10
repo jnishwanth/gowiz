@@ -13,32 +13,32 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 	devices := reg.List()
 	activeDev, _ := reg.GetActive()
 
-	innerWidth := max(width-6, 18)
+	innerWidth := max(width-6, 14)
 	header := RenderSectionHeader("⚡ Bulbs", isFocused, innerWidth)
 
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n")
+	sb.WriteString(header + "\n")
 
 	if len(devices) == 0 {
 		sb.WriteString(styles.DimText.Render("No WiZ lights.\nPress [R] to scan."))
 	} else {
-		maxLines := max(height-4, 3)
+		maxDeviceRows := max(height-6, 1)
 
 		offset := 0
-		if deviceCursor >= maxLines {
-			offset = deviceCursor - maxLines + 1
+		if deviceCursor >= maxDeviceRows {
+			offset = deviceCursor - maxDeviceRows + 1
 		}
-		if offset > len(devices)-maxLines && len(devices) > maxLines {
-			offset = len(devices) - maxLines
+		if offset > len(devices)-maxDeviceRows && len(devices) > maxDeviceRows {
+			offset = len(devices) - maxDeviceRows
 		}
 		if offset < 0 {
 			offset = 0
 		}
 
-		endIdx := min(offset+maxLines, len(devices))
+		endIdx := min(offset+maxDeviceRows, len(devices))
 		visibleCount := endIdx - offset
 
-		scrollbarLines := RenderScrollbar(visibleCount, len(devices), maxLines, offset)
+		scrollbarLines := RenderScrollbar(visibleCount, len(devices), maxDeviceRows, offset)
 
 		for i := offset; i < endIdx; i++ {
 			dev := devices[i]
@@ -81,7 +81,7 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 			}
 
 			leftWidth := lipgloss.Width(line)
-			padSpaces := max(0, innerWidth-leftWidth)
+			padSpaces := max(0, innerWidth-leftWidth-1)
 			fullRow := line + strings.Repeat(" ", padSpaces) + scrollChar
 
 			sb.WriteString(fullRow + "\n")
@@ -95,6 +95,6 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 
 	return panelStyle.
 		Width(max(width-2, 15)).
-		Height(max(height-2, 5)).
+		Height(max(height-2, 4)).
 		Render(sb.String())
 }

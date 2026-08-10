@@ -11,17 +11,18 @@ import (
 )
 
 func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, width, height int) string {
-	header := RenderSectionHeader("🎛 Control Center", isFocused, width-6)
+	innerWidth := max(width-6, 18)
+	header := RenderSectionHeader("🎛 Control Center", isFocused, innerWidth)
 
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n")
+	sb.WriteString(header + "\n")
 
 	if dev == nil {
 		sb.WriteString(styles.DimText.Render("No active device selected."))
 	} else {
-		powerStatus := styles.StatusSuccess.Render("● ON  [Space/o]")
+		powerStatus := styles.StatusSuccess.Render("● ON")
 		if !dev.State {
-			powerStatus = styles.StatusError.Render("○ OFF [Space/f]")
+			powerStatus = styles.StatusError.Render("○ OFF")
 		}
 
 		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(dev.IP)
@@ -31,18 +32,18 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 		}
 		rssiPill := lipgloss.NewStyle().Foreground(styles.Subtext0).Render(rssiStr)
 
-		sb.WriteString(fmt.Sprintf("%s  │  %s  │  %s\n", targetIP, powerStatus, rssiPill))
+		sb.WriteString(fmt.Sprintf("%s │ %s │ %s\n", targetIP, powerStatus, rssiPill))
 
 		// Sleep Countdown Badge if running
 		if sleepTimerSecs > 0 {
 			mins := sleepTimerSecs / 60
 			secs := sleepTimerSecs % 60
-			timerBadge := lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep Timer: %02d:%02d remaining", mins, secs))
+			timerBadge := lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep: %02d:%02d", mins, secs))
 			sb.WriteString(timerBadge + "\n")
 		}
 
 		// Brightness Bar
-		barWidth := max(width-18, 15)
+		barWidth := max(innerWidth-18, 10)
 		sb.WriteString(fmt.Sprintf("Brightness [%d%%]\n", dev.Brightness))
 		p := progress.New(progress.WithoutPercentage())
 		p.Width = barWidth
@@ -57,22 +58,23 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 			sb.WriteString(fmt.Sprintf("Active Scene: %s (ID: %d)\n", accent, dev.SceneID))
 
 			// Speed Bar
-			sb.WriteString(fmt.Sprintf("Speed [%d%%]  ", dev.Speed))
+			sb.WriteString(fmt.Sprintf("Speed [%d%%] ", dev.Speed))
 			spBar := progress.New(progress.WithoutPercentage())
-			spBar.Width = max(barWidth-15, 10)
+			spBar.Width = max(barWidth-10, 8)
 			spBar.FullColor = string(styles.Teal)
 			spBar.EmptyColor = string(styles.Surface0)
-			sb.WriteString(spBar.ViewAs(float64(dev.Speed)/200.0) + "  " + styles.DimText.Render("[/]") + "\n")
+			sb.WriteString(spBar.ViewAs(float64(dev.Speed)/200.0) + "\n")
 		} else if dev.Temp > 0 {
 			sb.WriteString(fmt.Sprintf("Color Temp: %s (%dK)\n", styles.StatusWarning.Render("Tunable White"), dev.Temp))
 
 			// Kelvin Warm-to-Cool Gradient Bar
 			kelvinRatio := float64(dev.Temp-2200) / float64(6500-2200)
+			cctBarWidth := max(innerWidth-20, 8)
 			cctBar := progress.New(progress.WithoutPercentage())
-			cctBar.Width = barWidth
+			cctBar.Width = cctBarWidth
 			cctBar.FullColor = string(styles.Yellow)
 			cctBar.EmptyColor = string(styles.Sky)
-			sb.WriteString("2200K 🟨 " + cctBar.ViewAs(kelvinRatio) + " 🟦 6500K\n")
+			sb.WriteString("2200K 🟨" + cctBar.ViewAs(kelvinRatio) + "🟦 6500K\n")
 		} else {
 			hexColor := fmt.Sprintf("#%02x%02x%02x", dev.RGB[0], dev.RGB[1], dev.RGB[2])
 			rgbSwatch := lipgloss.NewStyle().Foreground(lipgloss.Color(hexColor)).Bold(true).Render("████████ " + hexColor)

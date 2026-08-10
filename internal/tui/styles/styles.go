@@ -54,15 +54,13 @@ var (
 
 	SectionTitleStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(Blue).
-				MarginBottom(1)
+				Foreground(Blue)
 
 	FocusedSectionTitleStyle = lipgloss.NewStyle().
 					Bold(true).
 					Foreground(Crust).
 					Background(Yellow).
-					Padding(0, 1).
-					MarginBottom(1)
+					Padding(0, 1)
 
 	// Mode Pills (Vim Status)
 	NormalModeBadge = lipgloss.NewStyle().

@@ -124,7 +124,6 @@ func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
 	for _, dev := range targets {
 		ips = append(ips, dev.IP)
 
-		// Record undo history
 		prev := wiz.PilotParams{
 			State:   &dev.State,
 			Dimming: &dev.Brightness,
@@ -323,27 +322,11 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "enter", "o":
-		if m.activePanel == PanelScenes {
-			scenes := wiz.FilterScenes(m.searchQuery)
-			if m.sceneCursor >= 0 && m.sceneCursor < len(scenes) {
-				sc := scenes[m.sceneCursor]
-				m.setStatusMessage(fmt.Sprintf("Sending Scene: %s...", sc.Name))
-				return m, m.dispatchPilotCmd(wiz.NewSceneParams(sc.ID))
-			}
-		}
-		active, ok := m.Registry.GetActive()
-		if ok {
-			newState := !active.State
-			return m, m.dispatchPilotCmd(wiz.NewPowerParams(newState))
-		}
-		return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
-
-	case " ":
+	case "space":
 		if m.mode == ModeVisual {
-			active, ok := m.Registry.GetActive()
-			if ok {
-				m.Registry.ToggleSelection(active.IP)
+			devices := m.Registry.List()
+			if m.deviceCursor >= 0 && m.deviceCursor < len(devices) {
+				m.Registry.ToggleSelection(devices[m.deviceCursor].IP)
 			}
 			return m, nil
 		}
@@ -471,114 +454,108 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 		cmdStr := strings.TrimSpace(m.commandBuffer)
 		m.mode = ModeNormal
 		m.commandBuffer = ""
-		return m.executeVimCommand(cmdStr)
+
+		if cmdStr == "" {
+			return m, nil
+		}
+
+		parts := strings.Fields(cmdStr)
+		verb := strings.ToLower(parts[0])
+
+		switch verb {
+		case "q", "quit", "exit":
+			return m, tea.Quit
+
+		case "scan":
+			m.setStatusMessage("Scanning network...")
+			return m, m.scanNetworkCmd()
+
+		case "scene":
+			if len(parts) > 1 {
+				arg := strings.Join(parts[1:], " ")
+				if id, err := strconv.Atoi(arg); err == nil {
+					scene := wiz.GetSceneByID(id)
+					m.setStatusMessage(fmt.Sprintf("Scene set: %s", scene.Name))
+					return m, m.dispatchPilotCmd(wiz.NewSceneParams(id))
+				} else if scene, found := wiz.GetSceneByName(arg); found {
+					m.setStatusMessage(fmt.Sprintf("Scene set: %s", scene.Name))
+					return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
+				} else {
+					m.setStatusMessage(fmt.Sprintf("Unknown scene: %s", arg))
+				}
+			}
+
+		case "dim":
+			if len(parts) > 1 {
+				if dim, err := strconv.Atoi(parts[1]); err == nil {
+					m.setStatusMessage(fmt.Sprintf("Brightness set: %d%%", dim))
+					return m, m.dispatchPilotCmd(wiz.NewDimmingParams(dim))
+				}
+			}
+
+		case "temp":
+			if len(parts) > 1 {
+				if temp, err := strconv.Atoi(parts[1]); err == nil {
+					m.setStatusMessage(fmt.Sprintf("Color temp set: %dK", temp))
+					return m, m.dispatchPilotCmd(wiz.NewTempParams(temp))
+				}
+			}
+
+		case "rgb":
+			if len(parts) >= 4 {
+				r, _ := strconv.Atoi(parts[1])
+				g, _ := strconv.Atoi(parts[2])
+				b, _ := strconv.Atoi(parts[3])
+				m.setStatusMessage(fmt.Sprintf("RGB color set: R:%d G:%d B:%d", r, g, b))
+				return m, m.dispatchPilotCmd(wiz.NewRGBParams(r, g, b))
+			}
+
+		case "timer":
+			if len(parts) > 1 {
+				if mins, err := strconv.Atoi(parts[1]); err == nil {
+					m.sleepTimerSecs = mins * 60
+					m.setStatusMessage(fmt.Sprintf("Sleep timer set: %d minutes.", mins))
+				}
+			}
+
+		default:
+			m.setStatusMessage(fmt.Sprintf("Unknown command: :%s", cmdStr))
+		}
+
+		return m, nil
 
 	case "backspace":
 		if len(m.commandBuffer) > 0 {
 			m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
 		}
+		return m, nil
+
 	default:
 		if len(key) == 1 {
 			m.commandBuffer += key
 		}
+		return m, nil
 	}
-	return m, nil
 }
 
 func (m Model) handleSearchKey(key string) (Model, tea.Cmd) {
 	switch key {
-	case "enter":
-		m.searchQuery = m.commandBuffer
+	case "enter", "esc":
 		m.mode = ModeNormal
-		m.activePanel = PanelScenes
-		m.sceneCursor = 0
 		return m, nil
 
 	case "backspace":
-		if len(m.commandBuffer) > 0 {
-			m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 		}
-		m.searchQuery = m.commandBuffer
+		return m, nil
+
 	default:
 		if len(key) == 1 {
-			m.commandBuffer += key
-			m.searchQuery = m.commandBuffer
+			m.searchQuery += key
 		}
-	}
-	return m, nil
-}
-
-func (m Model) executeVimCommand(cmdStr string) (Model, tea.Cmd) {
-	if cmdStr == "" {
 		return m, nil
 	}
-
-	parts := strings.Fields(cmdStr)
-	cmd := strings.ToLower(parts[0])
-
-	switch cmd {
-	case "q", "quit":
-		return m, tea.Quit
-
-	case "scan":
-		m.setStatusMessage("Scanning subnet broadcasts...")
-		return m, m.scanNetworkCmd()
-
-	case "timer":
-		if len(parts) > 1 {
-			if mins, err := strconv.Atoi(parts[1]); err == nil {
-				m.sleepTimerSecs = mins * 60
-				m.setStatusMessage(fmt.Sprintf("Sleep timer set for %d minutes.", mins))
-			}
-		}
-
-	case "connect":
-		if len(parts) > 1 {
-			ip := parts[1]
-			m.Registry.AddOrUpdate(wiz.NewDevice(ip))
-			m.Registry.SetActive(ip)
-			m.setStatusMessage(fmt.Sprintf("Connected to %s", ip))
-		}
-
-	case "scene":
-		if len(parts) > 1 {
-			target := strings.Join(parts[1:], " ")
-			if id, err := strconv.Atoi(target); err == nil {
-				return m, m.dispatchPilotCmd(wiz.NewSceneParams(id))
-			}
-			if scene, found := wiz.GetSceneByName(target); found {
-				return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
-			}
-			m.setStatusMessage(fmt.Sprintf("Unknown scene: %s", target))
-		}
-
-	case "temp", "cct":
-		if len(parts) > 1 {
-			if kelvin, err := strconv.Atoi(parts[1]); err == nil {
-				return m, m.dispatchPilotCmd(wiz.NewTempParams(kelvin))
-			}
-		}
-
-	case "dim", "brightness":
-		if len(parts) > 1 {
-			if level, err := strconv.Atoi(parts[1]); err == nil {
-				return m, m.dispatchPilotCmd(wiz.NewDimmingParams(level))
-			}
-		}
-
-	case "rgb":
-		if len(parts) >= 4 {
-			r, _ := strconv.Atoi(parts[1])
-			g, _ := strconv.Atoi(parts[2])
-			b, _ := strconv.Atoi(parts[3])
-			return m, m.dispatchPilotCmd(wiz.NewRGBParams(r, g, b))
-		}
-
-	default:
-		m.setStatusMessage(fmt.Sprintf("Unknown command: :%s", cmdStr))
-	}
-
-	return m, nil
 }
 
 func (m Model) View() string {
@@ -611,11 +588,12 @@ func (m Model) View() string {
 
 	titleBar := styles.AppTitleStyle.Render("⚡ gowiz - WiZ Smart Light Controller")
 
+	// Total available content height for body (m.height - titleBar line - statusBar line)
+	contentHeight := max(m.height-2, 6)
+
 	// Compact / Narrow Terminal Mode (width < 65 or height < 15)
 	if m.width < 65 || m.height < 15 {
-		contentHeight := max(m.height-2, 6)
 		var activeBody string
-
 		switch m.activePanel {
 		case PanelDevices:
 			activeBody = views.RenderDeviceList(m.Registry, m.deviceCursor, true, m.width, contentHeight)
@@ -628,16 +606,18 @@ func (m Model) View() string {
 	}
 
 	// Standard 2-Column Responsive Grid Layout
-	contentHeight := max(m.height-2, 8)
 	sideWidth := clamp(int(float64(m.width)*0.28), 20, 30)
 	mainWidth := max(m.width-sideWidth, 30)
 
 	leftCol := views.RenderDeviceList(m.Registry, m.deviceCursor, m.activePanel == PanelDevices, sideWidth, contentHeight)
 
-	controlHeight := int(float64(contentHeight) * 0.40)
-	sceneHeight := contentHeight - controlHeight
+	// Render Control Panel first and measure its actual rendered line height
+	initialControlHeight := clamp(int(float64(contentHeight)*0.40), 8, 12)
+	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, initialControlHeight)
+	actualControlLines := lipgloss.Height(topRight)
 
-	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, controlHeight)
+	// Scene picker gets the exact remaining height so total rightCol height == contentHeight
+	sceneHeight := max(contentHeight-actualControlLines, 4)
 	bottomRight := views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, m.activePanel == PanelScenes, m.animFrame, mainWidth, sceneHeight)
 
 	rightCol := lipgloss.JoinVertical(lipgloss.Left, topRight, bottomRight)

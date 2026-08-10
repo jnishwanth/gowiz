@@ -12,7 +12,7 @@ func TestTUIStateSynchronization(t *testing.T) {
 	mockClient := wiz.NewMockClient()
 	m := NewModel(mockClient, "192.168.1.115")
 
-	t.Run("Responsive terminal layout rendering", func(t *testing.T) {
+	t.Run("Responsive terminal layout rendering line count bound", func(t *testing.T) {
 		sizes := []struct {
 			w, h int
 			name string
@@ -33,6 +33,13 @@ func TestTUIStateSynchronization(t *testing.T) {
 			}
 			if !strings.Contains(viewOutput, "gowiz") {
 				t.Errorf("%s: view output missing title header", sz.name)
+			}
+
+			lines := strings.Split(viewOutput, "\n")
+			lineCount := len(lines)
+
+			if lineCount > sz.h {
+				t.Errorf("%s: line count %d EXCEEDS terminal height %d! This causes top cutoff scroll!", sz.name, lineCount, sz.h)
 			}
 		}
 	})
