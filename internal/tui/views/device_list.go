@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"wiz-tui/internal/tui/styles"
 	"wiz-tui/internal/wiz"
 )
@@ -13,12 +14,19 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 	activeDev, _ := reg.GetActive()
 
 	var sb strings.Builder
-	sb.WriteString(styles.SectionTitleStyle.Render("⚡ Discovered Bulbs") + "\n\n")
+	sb.WriteString(styles.SectionTitleStyle.Render("⚡ Bulbs") + "\n\n")
 
 	if len(devices) == 0 {
-		sb.WriteString(styles.DimText.Render("No WiZ devices found.\nPress [R] to scan."))
+		sb.WriteString(styles.DimText.Render("No WiZ lights.\nPress [R] to scan."))
 	} else {
+		maxLines := max(height-4, 5)
+
 		for i, dev := range devices {
+			if i >= maxLines {
+				sb.WriteString(styles.DimText.Render(fmt.Sprintf("... +%d more", len(devices)-i)) + "\n")
+				break
+			}
+
 			isTarget := activeDev != nil && activeDev.IP == dev.IP
 
 			statusDot := styles.StatusSuccess.Render("●")
@@ -35,11 +43,12 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 			}
 
 			ipText := dev.IP
-			if dev.IsFallback {
-				ipText += " (Fallback)"
+			if dev.IsFallback && width > 28 {
+				ipText += " (FB)"
 			}
 
-			line := fmt.Sprintf("%s %s %d. %s", checkbox, statusDot, i+1, ipText)
+			ipTruncated := lipgloss.NewStyle().MaxWidth(max(width-14, 8)).Render(ipText)
+			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, ipTruncated)
 
 			if isTarget {
 				sb.WriteString(styles.SelectedItemStyle.Render("▸ "+line) + "\n")
@@ -55,7 +64,7 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, isFocused bool, width, height int
 	}
 
 	return panelStyle.
-		Width(width).
-		Height(height).
+		Width(max(width-2, 15)).
+		Height(max(height-2, 6)).
 		Render(sb.String())
 }

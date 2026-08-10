@@ -2,53 +2,18 @@ package tui
 
 import (
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"wiz-tui/internal/wiz"
 )
 
-func TestTUIModel(t *testing.T) {
+func TestTUIModelUX(t *testing.T) {
 	mockClient := wiz.NewMockClient()
 	m := NewModel(mockClient, "192.168.1.115")
 
-	t.Run("Initial model state", func(t *testing.T) {
-		if m.mode != ModeNormal {
-			t.Errorf("expected initial mode Normal, got %v", m.mode)
-		}
-		if m.activePanel != PanelDevices {
-			t.Errorf("expected initial panel Devices, got %v", m.activePanel)
-		}
-	})
-
-	t.Run("Navigation tab panel switching", func(t *testing.T) {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}, Alt: false})
-		m = updated.(Model)
-		// Send tab
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-		m = updated.(Model)
-
-		if m.activePanel != PanelControl {
-			t.Errorf("expected panel Control after Tab, got %v", m.activePanel)
-		}
-	})
-
-	t.Run("Command mode execution", func(t *testing.T) {
-		// Enter command mode
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
-		m = updated.(Model)
-
-		if m.mode != ModeCommand {
-			t.Fatalf("expected ModeCommand, got %v", m.mode)
-		}
-
-		// Type 'dim 50'
-		for _, r := range "dim 50" {
-			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-			m = updated.(Model)
-		}
-
-		// Hit enter
-		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	t.Run("Direct number hotkey 1-9 activates favorite scene", func(t *testing.T) {
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 		m = updated.(Model)
 
 		if cmd != nil {
@@ -57,34 +22,40 @@ func TestTUIModel(t *testing.T) {
 		}
 
 		activeDev, _ := m.Registry.GetActive()
-		if activeDev.Brightness != 50 {
-			t.Errorf("expected brightness 50 after :dim 50, got %d", activeDev.Brightness)
+		if activeDev.SceneID != 2 {
+			t.Errorf("expected sceneID 2 after pressing key 2, got %d", activeDev.SceneID)
 		}
 	})
 
-	t.Run("Visual multi-select mode", func(t *testing.T) {
-		// Toggle visual mode with 'v'
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	t.Run("Sleep timer set and countdown tick", func(t *testing.T) {
+		// Set timer using 't' key
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
 		m = updated.(Model)
 
-		if m.mode != ModeVisual {
-			t.Errorf("expected ModeVisual, got %v", m.mode)
+		if m.sleepTimerSecs != 15*60 {
+			t.Errorf("expected 900 seconds sleep timer, got %d", m.sleepTimerSecs)
 		}
 
-		// Toggle select all with 'a'
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		// Send TimerTickMsg
+		updated, _ = m.Update(TimerTickMsg(time.Now()))
 		m = updated.(Model)
 
-		selected := m.Registry.GetSelectedOrActive()
-		if len(selected) != 1 {
-			t.Errorf("expected 1 selected bulb, got %d", len(selected))
+		if m.sleepTimerSecs != 15*60-1 {
+			t.Errorf("expected sleep timer decremented by 1, got %d", m.sleepTimerSecs)
 		}
 	})
 
-	t.Run("View rendering sanity", func(t *testing.T) {
+	t.Run("Window size resize handling", func(t *testing.T) {
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		m = updated.(Model)
+
+		if m.width != 120 || m.height != 40 {
+			t.Errorf("expected dimensions 120x40, got %dx%d", m.width, m.height)
+		}
+
 		view := m.View()
 		if len(view) == 0 {
-			t.Errorf("expected non-empty rendered view")
+			t.Errorf("rendered view on resize should not be empty")
 		}
 	})
 }

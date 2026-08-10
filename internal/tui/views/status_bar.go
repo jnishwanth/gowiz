@@ -10,7 +10,6 @@ import (
 )
 
 func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, commandBuf string, statusMsg string, width int) string {
-	// Mode Badge
 	var modeBadge string
 	switch mode {
 	case "NORMAL":
@@ -27,16 +26,14 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 		modeBadge = styles.NormalModeBadge.Render(" " + mode + " ")
 	}
 
-	// Selection / Target info
 	targetStr := "Target: None"
 	if selectedCount > 0 {
-		targetStr = fmt.Sprintf("Selected: %d bulbs", selectedCount)
+		targetStr = fmt.Sprintf("Selected: %d", selectedCount)
 	} else if activeDev != nil {
-		targetStr = fmt.Sprintf("Target: %s", activeDev.IP)
+		targetStr = activeDev.IP
 	}
 	targetPill := lipgloss.NewStyle().Background(styles.Surface0).Foreground(styles.Text).Padding(0, 1).Render(targetStr)
 
-	// Command input line vs Status message
 	var middleText string
 	if mode == "COMMAND" {
 		middleText = styles.CommandPromptStyle.Render(":") + commandBuf
@@ -45,20 +42,18 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 	} else if statusMsg != "" {
 		middleText = styles.StatusInfo.Render(statusMsg)
 	} else {
-		middleText = styles.DimText.Render("Press [:] command • [/] search • [?] help • [q] quit")
+		middleText = styles.DimText.Render("[:] cmd • [/] search • [?] help • [Space] power • [1-9] scenes")
 	}
 
 	left := modeBadge + " " + targetPill
-	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.0")
+	right := lipgloss.NewStyle().Foreground(styles.Overlay0).Render("gowiz v1.1")
 
-	// Calculate spacing
 	availWidth := width - lipgloss.Width(left) - lipgloss.Width(right) - 4
-	if availWidth < 10 {
-		availWidth = 10
+	if availWidth < 5 {
+		return modeBadge + " " + targetPill
 	}
 
 	midTruncated := lipgloss.NewStyle().MaxWidth(availWidth).Render(middleText)
-
 	padding := strings.Repeat(" ", max(0, availWidth-lipgloss.Width(midTruncated)))
 	bar := left + " " + midTruncated + padding + " " + right
 
@@ -66,11 +61,4 @@ func RenderStatusBar(mode string, activeDev *wiz.Device, selectedCount int, comm
 		Background(styles.Mantle).
 		Width(width).
 		Render(bar)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

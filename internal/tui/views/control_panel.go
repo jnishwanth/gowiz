@@ -10,43 +10,70 @@ import (
 	"wiz-tui/internal/wiz"
 )
 
-func RenderControlPanel(dev *wiz.Device, isFocused bool, width, height int) string {
+func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, width, height int) string {
 	var sb strings.Builder
-	sb.WriteString(styles.SectionTitleStyle.Render("🎛 Control Center") + "\n\n")
+	sb.WriteString(styles.SectionTitleStyle.Render("🎛 Control Center") + "\n")
 
 	if dev == nil {
 		sb.WriteString(styles.DimText.Render("No active device selected."))
 	} else {
-		powerStatus := styles.StatusSuccess.Render("ON  [o]")
+		powerStatus := styles.StatusSuccess.Render("ON  [Space/o]")
 		if !dev.State {
-			powerStatus = styles.StatusError.Render("OFF [f/x]")
+			powerStatus = styles.StatusError.Render("OFF [Space/f]")
 		}
 
-		sb.WriteString(fmt.Sprintf("%s  Power: %s\n\n", styles.DimText.Render("Target:"), dev.IP))
-		sb.WriteString(fmt.Sprintf("State: %s\n\n", powerStatus))
+		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(dev.IP)
+		sb.WriteString(fmt.Sprintf("Target: %s  |  State: %s\n", targetIP, powerStatus))
+
+		// Sleep Countdown Badge if running
+		if sleepTimerSecs > 0 {
+			mins := sleepTimerSecs / 60
+			secs := sleepTimerSecs % 60
+			timerBadge := lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep Timer: %02d:%02d", mins, secs))
+			sb.WriteString(timerBadge + "\n")
+		}
 
 		// Brightness Bar
-		sb.WriteString(styles.SectionTitleStyle.Render("Brightness") + fmt.Sprintf(" [%d%%]\n", dev.Brightness))
+		barWidth := max(width-18, 15)
+		sb.WriteString(fmt.Sprintf("\nBrightness [%d%%]\n", dev.Brightness))
 		p := progress.New(progress.WithoutPercentage())
-		p.Width = 32
+		p.Width = barWidth
 		p.FullColor = string(styles.Green)
 		p.EmptyColor = string(styles.Surface0)
-		sb.WriteString(p.ViewAs(float64(dev.Brightness)/100.0) + "\n\n")
+		sb.WriteString(p.ViewAs(float64(dev.Brightness)/100.0) + "\n")
 
-		// RGB / Color Temp / Scene Telemetry
-		sb.WriteString(styles.SectionTitleStyle.Render("Color & Spectrum Mode") + "\n")
+		// Mode Specific Display (Scene / White Temp Gradient / RGB Swatch)
 		if dev.SceneID > 0 {
 			scene := wiz.GetSceneByID(dev.SceneID)
 			accent := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true).Render(scene.Name)
-			sb.WriteString(fmt.Sprintf("Active Scene: %s (ID: %d, Speed: %d)\n", accent, dev.SceneID, dev.Speed))
+			sb.WriteString(fmt.Sprintf("\nActive Scene: %s (ID: %d)\n", accent, dev.SceneID))
+
+			// Speed Bar
+			sb.WriteString(fmt.Sprintf("Speed [%d%%]  ", dev.Speed))
+			spBar := progress.New(progress.WithoutPercentage())
+			spBar.Width = max(barWidth-15, 10)
+			spBar.FullColor = string(styles.Teal)
+			spBar.EmptyColor = string(styles.Surface0)
+			sb.WriteString(spBar.ViewAs(float64(dev.Speed)/200.0) + "  " + styles.DimText.Render("[/]") + "\n")
 		} else if dev.Temp > 0 {
-			sb.WriteString(fmt.Sprintf("Color Temp: %s (%dK)\n", styles.StatusWarning.Render("Tunable White"), dev.Temp))
+			sb.WriteString(fmt.Sprintf("\nColor Temp: %s (%dK)\n", styles.StatusWarning.Render("Tunable White"), dev.Temp))
+
+			// Kelvin Warm-to-Cool Gradient Bar
+			kelvinRatio := float64(dev.Temp-2200) / float64(6500-2200)
+			cctBar := progress.New(progress.WithoutPercentage())
+			cctBar.Width = barWidth
+			cctBar.FullColor = string(styles.Yellow)
+			cctBar.EmptyColor = string(styles.Sky)
+			sb.WriteString("2200K 🟨 " + cctBar.ViewAs(kelvinRatio) + " 🟦 6500K\n")
 		} else {
-			rgbPill := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", dev.RGB[0], dev.RGB[1], dev.RGB[2]))).Bold(true).Render("████ RGB")
-			sb.WriteString(fmt.Sprintf("%s R:%d G:%d B:%d\n", rgbPill, dev.RGB[0], dev.RGB[1], dev.RGB[2]))
+			hexColor := fmt.Sprintf("#%02x%02x%02x", dev.RGB[0], dev.RGB[1], dev.RGB[2])
+			rgbPill := lipgloss.NewStyle().Foreground(lipgloss.Color(hexColor)).Bold(true).Render("████ " + hexColor)
+			sb.WriteString(fmt.Sprintf("\nRGB Color: %s (R:%d G:%d B:%d)\n", rgbPill, dev.RGB[0], dev.RGB[1], dev.RGB[2]))
 		}
 
-		sb.WriteString("\n" + styles.DimText.Render("Vim Shortcuts: [o/x] power • [h/l] dimming • [r/g/b/w] presets"))
+		if height > 12 {
+			sb.WriteString("\n" + styles.DimText.Render("Hotkeys: [Space] Power • [1-9] Scenes • [t] Timer • [←/→] Dim"))
+		}
 	}
 
 	panelStyle := styles.PanelStyle
@@ -55,7 +82,7 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, width, height int) stri
 	}
 
 	return panelStyle.
-		Width(width).
-		Height(height).
+		Width(max(width-2, 20)).
+		Height(max(height-2, 8)).
 		Render(sb.String())
 }

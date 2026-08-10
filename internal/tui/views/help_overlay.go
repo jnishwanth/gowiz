@@ -9,7 +9,7 @@ import (
 
 func RenderHelpOverlay(width, height int) string {
 	var sb strings.Builder
-	sb.WriteString(styles.AppTitleStyle.Render("⌨  gowiz Vim Keyboard Workflow Reference") + "\n\n")
+	sb.WriteString(styles.AppTitleStyle.Render("⌨  gowiz Ergonomic Keyboard Reference") + "\n\n")
 
 	sections := []struct {
 		Title string
@@ -18,21 +18,22 @@ func RenderHelpOverlay(width, height int) string {
 		{
 			Title: "Navigation & Panel Focus",
 			Keys: [][2]string{
-				{"Tab / Shift+Tab", "Cycle active panel (Devices / Controls / Scenes)"},
-				{"j / k  or  ↓ / ↑", "Navigate items in active panel"},
+				{"Tab / Shift+Tab", "Cycle focus (Bulbs / Control Center / Scenes)"},
+				{"j / k  or  ↓ / ↑", "Move selection up / down"},
 				{"h / l  or  ← / →", "Adjust brightness (-10% / +10%)"},
-				{"gg / G", "Jump to top / bottom of list"},
+				{"g / G  or  Home/End", "Jump to top / bottom of list"},
 			},
 		},
 		{
-			Title: "Light Control Shortcuts (NORMAL Mode)",
+			Title: "Direct Hotkeys & Controls",
 			Keys: [][2]string{
-				{"o / Space", "Turn ON light"},
-				{"x / f", "Turn OFF light"},
+				{"Space", "Instant Power Toggle (ON / OFF)"},
+				{"Enter", "Activate highlighted scene or target light"},
+				{"1 - 9", "Instant trigger favorite WiZ dynamic scenes"},
+				{"t", "Start 15-minute countdown Sleep Timer"},
+				{"[ / ]", "Decrease / Increase dynamic scene speed"},
 				{"r / g / b", "Quick RGB Red / Green / Blue"},
-				{"w / c", "Warm White (2700K) / Cozy (2200K)"},
-				{"s", "Sleep Mode preset"},
-				{"p", "Purple preset"},
+				{"w / c", "Warm White (2700K) / Cozy Amber (2200K)"},
 				{"u", "Undo last state change"},
 			},
 		},
@@ -40,20 +41,20 @@ func RenderHelpOverlay(width, height int) string {
 			Title: "Visual Mode & Multi-Bulb Control",
 			Keys: [][2]string{
 				{"v", "Toggle Visual Multi-Select Mode"},
-				{"Space", "Toggle selection checkbox on focused bulb"},
+				{"Space", "Toggle selection checkbox on highlighted bulb"},
 				{"a", "Select All bulbs"},
-				{"Esc", "Clear selection / Return to NORMAL mode"},
+				{"Esc", "Clear selections / Return to Normal Mode"},
 			},
 		},
 		{
-			Title: "Command Mode (:) & Search (/)",
+			Title: "Command Mode (:) & Instant Search (/)",
 			Keys: [][2]string{
-				{":scene <name|id>", "Activate WiZ scene by name or ID (e.g. :scene sunset)"},
+				{":scene <name|id>", "Activate dynamic scene (e.g. :scene sunset)"},
 				{":temp <2200-6500>", "Set Color Temperature in Kelvin"},
 				{":rgb <r> <g> <b>", "Set RGB color values (0-255)"},
-				{":dim <10-100>", "Set exact dimming brightness percentage"},
-				{":scan", "Rescan local network for WiZ devices"},
-				{":connect <ip>", "Directly target WiZ bulb IP address"},
+				{":dim <10-100>", "Set exact dimming percentage"},
+				{":timer <mins>", "Set custom sleep countdown timer"},
+				{":scan", "Rescan subnet for WiZ devices"},
 				{"/ <query>", "Instant search / filter 32 dynamic WiZ scenes"},
 				{":q / q", "Quit gowiz"},
 			},
@@ -63,7 +64,7 @@ func RenderHelpOverlay(width, height int) string {
 	for _, sec := range sections {
 		sb.WriteString(styles.SectionTitleStyle.Render(sec.Title) + "\n")
 		for _, k := range sec.Keys {
-			keyPill := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(fmtKey(k[0], 18))
+			keyPill := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(fmtKey(k[0], 20))
 			desc := styles.UnselectedItemStyle.Render(k[1])
 			sb.WriteString(keyPill + "  " + desc + "\n")
 		}
@@ -73,8 +74,8 @@ func RenderHelpOverlay(width, height int) string {
 	sb.WriteString(styles.DimText.Render("Press [Esc] or [?] to close help overlay"))
 
 	return styles.ActivePanelStyle.
-		Width(max(width-10, 50)).
-		Height(max(height-6, 20)).
+		Width(max(width-8, 45)).
+		Height(max(height-4, 18)).
 		Render(sb.String())
 }
 

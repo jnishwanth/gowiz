@@ -15,19 +15,20 @@ import (
 )
 
 type Model struct {
-	client        wiz.Client
-	Registry      *wiz.DeviceRegistry
-	mode          Mode
-	activePanel   Panel
-	commandBuffer string
-	searchQuery   string
-	statusMessage string
-	statusTimer   time.Time
-	width         int
-	height        int
-	sceneCursor   int // Focus index in scene list
-	deviceCursor  int // Focus index in device list
-	undoStack     map[string][]wiz.PilotParams
+	client         wiz.Client
+	Registry       *wiz.DeviceRegistry
+	mode           Mode
+	activePanel    Panel
+	commandBuffer  string
+	searchQuery    string
+	statusMessage  string
+	statusTimer    time.Time
+	width          int
+	height         int
+	sceneCursor    int
+	deviceCursor   int
+	sleepTimerSecs int
+	undoStack      map[string][]wiz.PilotParams
 }
 
 func NewModel(client wiz.Client, initialIP string) Model {
@@ -55,10 +56,16 @@ type CommandFinishedMsg struct {
 	Err error
 	IP  string
 }
-type ClearStatusMsg struct{}
+type TimerTickMsg time.Time
+
+func tickTimerCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return TimerTickMsg(t)
+	})
+}
 
 func (m Model) Init() tea.Cmd {
-	return m.scanNetworkCmd()
+	return tea.Batch(m.scanNetworkCmd(), tickTimerCmd())
 }
 
 func (m Model) scanNetworkCmd() tea.Cmd {
@@ -119,6 +126,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case TimerTickMsg:
+		if m.sleepTimerSecs > 0 {
+			m.sleepTimerSecs--
+			if m.sleepTimerSecs == 0 {
+				m.statusMessage = "Sleep timer expired. Turning off lights."
+				cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
+			}
+		}
+		cmds = append(cmds, tickTimerCmd())
+
 	case ScanFinishedMsg:
 		foundCount := 0
 		for _, ip := range msg {
@@ -133,9 +150,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = "Command executed successfully."
 		}
-
-	case ClearStatusMsg:
-		m.statusMessage = ""
 
 	case tea.KeyMsg:
 		key := msg.String()
@@ -154,7 +168,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Handle key input by active Mode
 		switch m.mode {
 		case ModeCommand:
 			return m.handleCommandKey(key)
@@ -177,6 +190,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
+	// Handle numbers 1-9 for direct favorite scene shortcuts
+	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+		sceneID := int(key[0] - '0')
+		scene := wiz.GetSceneByID(sceneID)
+		m.statusMessage = fmt.Sprintf("Activated Scene: %s", scene.Name)
+		return m, m.dispatchPilotCmd(wiz.NewSceneParams(sceneID))
+	}
+
 	switch key {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -225,7 +246,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "G":
+	case "G", "end":
 		devices := m.Registry.List()
 		if m.activePanel == PanelDevices && len(devices) > 0 {
 			m.deviceCursor = len(devices) - 1
@@ -238,21 +259,33 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "o", " ":
-		// Enter on scene picker activates highlighted scene
+	case "enter", "o":
 		if m.activePanel == PanelScenes {
 			scenes := wiz.FilterScenes(m.searchQuery)
 			if m.sceneCursor >= 0 && m.sceneCursor < len(scenes) {
 				sc := scenes[m.sceneCursor]
+				m.statusMessage = fmt.Sprintf("Activated Scene: %s", sc.Name)
 				return m, m.dispatchPilotCmd(wiz.NewSceneParams(sc.ID))
 			}
 		}
-		if key == " " && m.mode == ModeVisual {
+		active, ok := m.Registry.GetActive()
+		if ok {
+			newState := !active.State
+			return m, m.dispatchPilotCmd(wiz.NewPowerParams(newState))
+		}
+		return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
+
+	case " ":
+		if m.mode == ModeVisual {
 			active, ok := m.Registry.GetActive()
 			if ok {
 				m.Registry.ToggleSelection(active.IP)
 			}
 			return m, nil
+		}
+		active, ok := m.Registry.GetActive()
+		if ok {
+			return m, m.dispatchPilotCmd(wiz.NewPowerParams(!active.State))
 		}
 		return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
 
@@ -273,6 +306,26 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.dispatchPilotCmd(wiz.NewDimmingParams(newDim))
 		}
 
+	case "t":
+		// Set 15-minute countdown sleep timer
+		m.sleepTimerSecs = 15 * 60
+		m.statusMessage = "Sleep timer set: 15 minutes."
+		return m, nil
+
+	case "[":
+		active, ok := m.Registry.GetActive()
+		if ok && active.SceneID > 0 {
+			newSp := clamp(active.Speed-10, 20, 200)
+			return m, m.dispatchPilotCmd(wiz.NewSceneParams(active.SceneID, newSp))
+		}
+
+	case "]":
+		active, ok := m.Registry.GetActive()
+		if ok && active.SceneID > 0 {
+			newSp := clamp(active.Speed+10, 20, 200)
+			return m, m.dispatchPilotCmd(wiz.NewSceneParams(active.SceneID, newSp))
+		}
+
 	case "r":
 		return m, m.dispatchPilotCmd(wiz.NewRGBParams(255, 0, 0))
 	case "g":
@@ -283,11 +336,6 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		return m, m.dispatchPilotCmd(wiz.NewTempParams(2700))
 	case "c":
 		return m, m.dispatchPilotCmd(wiz.NewTempParams(2200))
-	case "s":
-		// Sleep mode preset
-		return m, m.dispatchPilotCmd(wiz.NewRGBParams(255, 75, 0))
-	case "p":
-		return m, m.dispatchPilotCmd(wiz.NewRGBParams(147, 51, 234))
 
 	case "a":
 		if m.mode == ModeVisual {
@@ -296,12 +344,10 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "R":
-		// Rescan network
 		m.statusMessage = "Rescanning network..."
 		return m, m.scanNetworkCmd()
 
 	case "u":
-		// Undo last state for active device
 		active, ok := m.Registry.GetActive()
 		if ok {
 			stack := m.undoStack[active.IP]
@@ -414,6 +460,14 @@ func (m Model) executeVimCommand(cmdStr string) (Model, tea.Cmd) {
 		m.statusMessage = "Scanning subnet broadcasts..."
 		return m, m.scanNetworkCmd()
 
+	case "timer":
+		if len(parts) > 1 {
+			if mins, err := strconv.Atoi(parts[1]); err == nil {
+				m.sleepTimerSecs = mins * 60
+				m.statusMessage = fmt.Sprintf("Sleep timer set for %d minutes.", mins)
+			}
+		}
+
 	case "connect":
 		if len(parts) > 1 {
 			ip := parts[1]
@@ -468,18 +522,18 @@ func (m Model) View() string {
 		return views.RenderHelpOverlay(m.width, m.height)
 	}
 
-	// Layout grid
-	sideWidth := 30
-	mainWidth := max(m.width-sideWidth-6, 40)
-	contentHeight := max(m.height-5, 15)
+	// Auto-scaling responsive layout calculations
+	sideWidth := clamp(int(float64(m.width)*0.30), 22, 36)
+	mainWidth := max(m.width-sideWidth-6, 30)
+	contentHeight := max(m.height-4, 12)
 
 	leftCol := views.RenderDeviceList(m.Registry, m.activePanel == PanelDevices, sideWidth, contentHeight)
 
-	controlHeight := contentHeight / 2
+	controlHeight := int(float64(contentHeight) * 0.45)
 	sceneHeight := contentHeight - controlHeight - 2
 
 	activeDev, _ := m.Registry.GetActive()
-	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, mainWidth, controlHeight)
+	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, controlHeight)
 
 	activeSceneID := 0
 	if activeDev != nil {
@@ -509,4 +563,14 @@ func (m Model) View() string {
 	titleBar := styles.AppTitleStyle.Render("⚡ gowiz - WiZ Smart Light Controller")
 
 	return lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusBar)
+}
+
+func clamp(val, min, max int) int {
+	if val < min {
+		return min
+	}
+	if val > max {
+		return max
+	}
+	return val
 }

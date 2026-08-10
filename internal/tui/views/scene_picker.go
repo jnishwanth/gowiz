@@ -13,17 +13,25 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 	scenes := wiz.FilterScenes(filterQuery)
 
 	var sb strings.Builder
-	title := "🎨 WiZ Dynamic Scenes (32)"
+	title := "🎨 Dynamic Scenes"
 	if filterQuery != "" {
 		title += fmt.Sprintf(" [Filter: %s]", filterQuery)
 	}
-	sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n\n")
+	sb.WriteString(styles.SectionTitleStyle.Render(title) + "\n")
 
 	if len(scenes) == 0 {
-		sb.WriteString(styles.DimText.Render("No scenes match search query.\nPress [Esc] to clear filter."))
+		sb.WriteString(styles.DimText.Render("No scenes match query.\nPress [Esc] to clear filter."))
 	} else {
-		// Render scene list
-		for _, scene := range scenes {
+		// Calculate available lines based on height
+		maxLines := max(height-4, 5)
+
+		for i, scene := range scenes {
+			if i >= maxLines {
+				moreCount := len(scenes) - i
+				sb.WriteString(styles.DimText.Render(fmt.Sprintf("... and %d more scenes (use j/k to scroll)", moreCount)) + "\n")
+				break
+			}
+
 			isCurrent := scene.ID == activeSceneID
 			accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(scene.AccentColor)).Bold(true)
 
@@ -32,10 +40,20 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 				prefix = styles.StatusSuccess.Render("▸ ")
 			}
 
-			badge := accentStyle.Render(fmt.Sprintf("[%2d] %-15s", scene.ID, scene.Name))
-			category := styles.DimText.Render(fmt.Sprintf("(%s)", scene.Category))
+			shortcut := "   "
+			if scene.ID >= 1 && scene.ID <= 9 {
+				shortcut = styles.StatusWarning.Render(fmt.Sprintf("[%d]", scene.ID))
+			}
 
-			sb.WriteString(fmt.Sprintf("%s%s %s\n", prefix, badge, category))
+			nameStr := lipgloss.NewStyle().MaxWidth(max(width-22, 10)).Render(scene.Name)
+			badge := accentStyle.Render(fmt.Sprintf("%s %-12s", shortcut, nameStr))
+
+			catStr := ""
+			if width > 45 {
+				catStr = " " + styles.DimText.Render("("+scene.Category+")")
+			}
+
+			sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, badge, catStr))
 		}
 	}
 
@@ -45,7 +63,7 @@ func RenderScenePicker(filterQuery string, activeSceneID int, isFocused bool, wi
 	}
 
 	return panelStyle.
-		Width(width).
-		Height(height).
+		Width(max(width-2, 20)).
+		Height(max(height-2, 6)).
 		Render(sb.String())
 }
