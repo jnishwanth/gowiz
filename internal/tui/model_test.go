@@ -143,4 +143,69 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected telemetry sync brightness 42 temp 3200, got %d and %d", dev.Brightness, dev.Temp)
 		}
 	})
+
+	t.Run("Space key toggles power in Normal mode", func(t *testing.T) {
+		activeDev, ok := m.Registry.GetActive()
+		if !ok {
+			t.Fatalf("expected active device")
+		}
+		initialState := activeDev.State
+
+		// Send space key rune (' ')
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+
+		activeDev, _ = m.Registry.GetActive()
+		if activeDev.State == initialState {
+			t.Errorf("expected power state to toggle from %v to %v", initialState, !initialState)
+		}
+
+		// Send space key again via tea.KeySpace
+		newState := activeDev.State
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+
+		activeDev, _ = m.Registry.GetActive()
+		if activeDev.State == newState {
+			t.Errorf("expected power state to toggle back from %v to %v", newState, !newState)
+		}
+	})
+
+	t.Run("Space key toggles selection in Visual mode", func(t *testing.T) {
+		// Enter Visual mode
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+		m = updated.(Model)
+		if m.mode != ModeVisual {
+			t.Fatalf("expected mode ModeVisual, got %v", m.mode)
+		}
+
+		activeDev, _ := m.Registry.GetActive()
+		initialSelected := activeDev.Selected
+
+		// Press space key to toggle selection
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+		m = updated.(Model)
+
+		activeDev, _ = m.Registry.GetActive()
+		if activeDev.Selected == initialSelected {
+			t.Errorf("expected selection to toggle from %v in visual mode", initialSelected)
+		}
+
+		// Exit visual mode with esc
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		m = updated.(Model)
+		if m.mode != ModeNormal {
+			t.Errorf("expected mode ModeNormal after Esc, got %v", m.mode)
+		}
+	})
 }

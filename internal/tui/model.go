@@ -322,7 +322,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "space":
+	case " ", "space":
 		if m.mode == ModeVisual {
 			devices := m.Registry.List()
 			if m.deviceCursor >= 0 && m.deviceCursor < len(devices) {

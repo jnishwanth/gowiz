@@ -89,7 +89,7 @@ var DefaultKeyMap = KeyMap{
 	Down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j/k", "navigate")),
 	Left:     key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "dim/speed")),
 	Right:    key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("h/l", "dim/speed")),
-	Power:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "power toggle")),
+	Power:    key.NewBinding(key.WithKeys(" ", "space"), key.WithHelp("space", "power toggle")),
 	Select:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply")),
 	Visual:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "visual mode")),
 	Command:  key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "command bar")),
