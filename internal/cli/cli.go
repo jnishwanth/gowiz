@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -19,7 +20,14 @@ type Options struct {
 	TargetIP   string
 	Mock       bool
 	Command    string
+	JSONOutput bool
 	Writer     io.Writer
+}
+
+func printJSON(w io.Writer, data any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(data)
 }
 
 // Run executes a non-interactive command string against WiZ smart lights and configuration.
@@ -106,6 +114,28 @@ func Run(ctx context.Context, opts Options) error {
 			return fmt.Errorf("failed to query telemetry from %s: %w", activeDev.IP, err)
 		}
 		activeDev.UpdateFromPilot(*pilot)
+
+		if opts.JSONOutput {
+			type TelemetryJSON struct {
+				IP            string `json:"ip"`
+				Name          string `json:"name,omitempty"`
+				Room          string `json:"room,omitempty"`
+				State         bool   `json:"state"`
+				Brightness    int    `json:"brightness"`
+				SignalQuality string `json:"signal_quality"`
+				SignalPct     int    `json:"signal_percentage"`
+			}
+			return printJSON(w, TelemetryJSON{
+				IP:            activeDev.IP,
+				Name:          activeDev.Name,
+				Room:          activeDev.Room,
+				State:         activeDev.State,
+				Brightness:    activeDev.Brightness,
+				SignalQuality: activeDev.SignalQuality(),
+				SignalPct:     activeDev.SignalPercentage(),
+			})
+		}
+
 		fmt.Fprintf(w, "Bulb Telemetry (%s):\n", activeDev.IP)
 		fmt.Fprintf(w, "  IP: %s\n", activeDev.IP)
 		if activeDev.Name != "" {
@@ -125,6 +155,13 @@ func Run(ctx context.Context, opts Options) error {
 		if err := cfgMgr.ExportToFile(result.ExportPath); err != nil {
 			return fmt.Errorf("failed to export configuration: %w", err)
 		}
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"action": "export",
+				"path":   result.ExportPath,
+			})
+		}
 		fmt.Fprintf(w, "Configuration exported successfully to %s\n", result.ExportPath)
 		return nil
 	}
@@ -134,6 +171,13 @@ func Run(ctx context.Context, opts Options) error {
 		if err := cfgMgr.ImportFromFile(result.ImportPath); err != nil {
 			return fmt.Errorf("failed to import configuration: %w", err)
 		}
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"action": "import",
+				"path":   result.ImportPath,
+			})
+		}
 		fmt.Fprintf(w, "Configuration imported successfully from %s\n", result.ImportPath)
 		return nil
 	}
@@ -141,22 +185,46 @@ func Run(ctx context.Context, opts Options) error {
 	// Handle preset list
 	if result.ListPresets {
 		presets := cfgMgr.GetPresets()
-		fmt.Fprintln(w, "Available Presets:")
+		builtinList := make([]string, 0, len(tui.BuiltinPresets))
 		for name := range tui.BuiltinPresets {
-			fmt.Fprintf(w, "  - %s (builtin)\n", name)
+			builtinList = append(builtinList, name)
 		}
+		customList := make([]string, 0, len(presets))
 		for name := range presets {
 			if _, builtin := tui.BuiltinPresets[name]; !builtin {
-				fmt.Fprintf(w, "  - %s (custom)\n", name)
+				customList = append(customList, name)
 			}
+		}
+
+		if opts.JSONOutput {
+			type PresetsJSON struct {
+				Builtin []string `json:"builtin"`
+				Custom  []string `json:"custom"`
+			}
+			return printJSON(w, PresetsJSON{
+				Builtin: builtinList,
+				Custom:  customList,
+			})
+		}
+
+		fmt.Fprintln(w, "Available Presets:")
+		for _, name := range builtinList {
+			fmt.Fprintf(w, "  - %s (builtin)\n", name)
+		}
+		for _, name := range customList {
+			fmt.Fprintf(w, "  - %s (custom)\n", name)
 		}
 		return nil
 	}
 
 	// Handle category list
 	if result.ListCategories {
+		cats := wiz.GetSceneCategories()
+		if opts.JSONOutput {
+			return printJSON(w, cats)
+		}
 		fmt.Fprintln(w, "Scene Categories:")
-		for _, cat := range wiz.GetSceneCategories() {
+		for _, cat := range cats {
 			fmt.Fprintf(w, "  - %s\n", cat)
 		}
 		return nil
@@ -165,6 +233,12 @@ func Run(ctx context.Context, opts Options) error {
 	// Handle recent target IPs display
 	if result.ShowRecent {
 		recent := cfg.RecentIPs
+		if recent == nil {
+			recent = []string{}
+		}
+		if opts.JSONOutput {
+			return printJSON(w, recent)
+		}
 		if len(recent) == 0 {
 			fmt.Fprintln(w, "No recent target IPs recorded.")
 		} else {
@@ -178,6 +252,24 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Handle config info summary
 	if result.ConfigInfo {
+		if opts.JSONOutput {
+			type ConfigSummaryJSON struct {
+				ConfigFile    string   `json:"config_file"`
+				LastActiveIP  string   `json:"last_active_ip"`
+				RecentIPs     []string `json:"recent_ips"`
+				DeviceAliases int      `json:"device_aliases_count"`
+				DeviceRooms   int      `json:"device_rooms_count"`
+				CustomPresets int      `json:"custom_presets_count"`
+			}
+			return printJSON(w, ConfigSummaryJSON{
+				ConfigFile:    cfgMgr.FilePath(),
+				LastActiveIP:  cfg.LastActiveIP,
+				RecentIPs:     cfg.RecentIPs,
+				DeviceAliases: len(cfg.DeviceAliases),
+				DeviceRooms:   len(cfg.DeviceRooms),
+				CustomPresets: len(cfg.Presets),
+			})
+		}
 		fmt.Fprintf(w, "Configuration File: %s\n", cfgMgr.FilePath())
 		fmt.Fprintf(w, "Last Active IP: %s\n", cfg.LastActiveIP)
 		fmt.Fprintf(w, "Recent Target IPs: %d\n", len(cfg.RecentIPs))
@@ -197,6 +289,13 @@ func Run(ctx context.Context, opts Options) error {
 		if activeDev.MAC != "" {
 			_ = cfgMgr.SetAlias(activeDev.MAC, result.NewDeviceName)
 		}
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"target": activeDev.IP,
+				"name":   result.NewDeviceName,
+			})
+		}
 		fmt.Fprintf(w, "Updated device name for %s to '%s'\n", activeDev.IP, result.NewDeviceName)
 		return nil
 	}
@@ -215,6 +314,13 @@ func Run(ctx context.Context, opts Options) error {
 		if activeDev.MAC != "" {
 			_ = cfgMgr.SetRoom(activeDev.MAC, room)
 		}
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"target": activeDev.IP,
+				"room":   room,
+			})
+		}
 		if room == "" {
 			fmt.Fprintf(w, "Cleared room assignment for %s\n", activeDev.IP)
 		} else {
@@ -230,6 +336,13 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		snap := tui.PresetFromDevice(activeDev)
 		_ = cfgMgr.SetPreset(result.SavePresetName, snap)
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"preset": result.SavePresetName,
+				"action": "save",
+			})
+		}
 		fmt.Fprintf(w, "Saved active preset as '%s'\n", result.SavePresetName)
 		return nil
 	}
@@ -237,6 +350,13 @@ func Run(ctx context.Context, opts Options) error {
 	// Handle preset deletion
 	if result.DeletePresetName != "" {
 		_ = cfgMgr.DeletePreset(result.DeletePresetName)
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"preset": result.DeletePresetName,
+				"action": "delete",
+			})
+		}
 		fmt.Fprintf(w, "Deleted preset '%s'\n", result.DeletePresetName)
 		return nil
 	}
@@ -245,6 +365,13 @@ func Run(ctx context.Context, opts Options) error {
 	if result.TargetIP != "" && result.PilotParams == nil {
 		_ = cfgMgr.SetLastActiveIP(result.TargetIP)
 		_ = cfgMgr.AddRecentIP(result.TargetIP)
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"action": "connect",
+				"ip":     result.TargetIP,
+			})
+		}
 		fmt.Fprintf(w, "Connected and saved target IP: %s\n", result.TargetIP)
 		return nil
 	}
@@ -264,11 +391,28 @@ func Run(ctx context.Context, opts Options) error {
 		for ip, err := range errs {
 			if err != nil {
 				failedCount++
-				fmt.Fprintf(w, "  - %s: %v\n", ip, err)
+				if !opts.JSONOutput {
+					fmt.Fprintf(w, "  - %s: %v\n", ip, err)
+				}
 			}
 		}
 		if failedCount > 0 {
+			if opts.JSONOutput {
+				return printJSON(w, map[string]any{
+					"status":       "error",
+					"room":         result.TargetRoom,
+					"device_count": len(ips),
+					"failed_count": failedCount,
+				})
+			}
 			return fmt.Errorf("batch room command failed for %d device(s)", failedCount)
+		}
+		if opts.JSONOutput {
+			return printJSON(w, map[string]any{
+				"status":       "ok",
+				"room":         result.TargetRoom,
+				"device_count": len(ips),
+			})
 		}
 		fmt.Fprintf(w, "Successfully sent command to room '%s' (%d device(s))\n", result.TargetRoom, len(ips))
 		return nil
@@ -292,12 +436,32 @@ func Run(ctx context.Context, opts Options) error {
 		_ = cfgMgr.SetLastActiveIP(targetIPToUse)
 		_ = cfgMgr.AddRecentIP(targetIPToUse)
 
-		if result.StatusMsg != "" {
-			fmt.Fprintln(w, result.StatusMsg)
-		} else {
-			fmt.Fprintf(w, "Command executed successfully on %s\n", targetIPToUse)
+		msg := result.StatusMsg
+		if msg == "" {
+			msg = fmt.Sprintf("Command executed successfully on %s", targetIPToUse)
 		}
+
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status":    "ok",
+				"target_ip": targetIPToUse,
+				"message":   msg,
+			})
+		}
+
+		fmt.Fprintln(w, msg)
 		return nil
+	}
+
+	if opts.JSONOutput {
+		msg := result.StatusMsg
+		if msg == "" {
+			msg = "OK"
+		}
+		return printJSON(w, map[string]string{
+			"status":  "ok",
+			"message": msg,
+		})
 	}
 
 	if result.StatusMsg != "" {
@@ -308,3 +472,4 @@ func Run(ctx context.Context, opts Options) error {
 
 	return nil
 }
+

@@ -21,6 +21,7 @@ func main() {
 	mockFlag := flag.Bool("mock", false, "Run in mock client mode without network hardware")
 	configFlag := flag.String("config", "", "Custom path to configuration JSON file")
 	cmdFlag := flag.String("cmd", "", "Non-interactive command string to execute")
+	jsonFlag := flag.Bool("json", false, "Output results in JSON format in CLI mode")
 	versionFlag := flag.Bool("version", false, "Print version information and exit")
 	flag.BoolVar(versionFlag, "v", false, "Print version information and exit")
 
@@ -54,9 +55,14 @@ func main() {
 			TargetIP:   *ipFlag,
 			Mock:       *mockFlag,
 			Command:    cmdStr,
+			JSONOutput: *jsonFlag,
 		}
 		if err := cli.Run(context.Background(), opts); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			if *jsonFlag {
+				fmt.Fprintf(os.Stderr, "{\"status\":\"error\",\"error\":%q}\n", err.Error())
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
 			os.Exit(1)
 		}
 		os.Exit(0)

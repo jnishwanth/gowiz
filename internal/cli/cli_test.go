@@ -222,4 +222,147 @@ func TestCLIRun(t *testing.T) {
 			t.Fatalf("unexpected error deleting preset: %v", err)
 		}
 	})
+
+	t.Run("JSON_output_formatting", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		opts := Options{
+			ConfigPath: configPath,
+			TargetIP:   "192.168.1.107",
+			Mock:       true,
+			Command:    "info",
+			JSONOutput: true,
+			Writer:     buf,
+		}
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		jsonStr := buf.String()
+		if !strings.Contains(jsonStr, `"ip": "192.168.1.107"`) || !strings.Contains(jsonStr, `"signal_quality"`) {
+			t.Errorf("expected JSON telemetry output, got: %s", jsonStr)
+		}
+
+		// Pilot command JSON
+		buf.Reset()
+		opts.Command = "warm"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"status": "ok"`) || !strings.Contains(buf.String(), `"target_ip": "192.168.1.107"`) {
+			t.Errorf("expected JSON pilot command response, got: %s", buf.String())
+		}
+
+		// Preset list JSON
+		buf.Reset()
+		opts.Command = "preset list"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"builtin"`) || !strings.Contains(buf.String(), "evening") {
+			t.Errorf("expected JSON preset list response, got: %s", buf.String())
+		}
+
+		// Categories list JSON
+		buf.Reset()
+		opts.Command = "categories"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Nature") {
+			t.Errorf("expected JSON category list response, got: %s", buf.String())
+		}
+
+		// Config summary JSON
+		buf.Reset()
+		opts.Command = "config"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"config_file"`) || !strings.Contains(buf.String(), `"last_active_ip"`) {
+			t.Errorf("expected JSON config summary response, got: %s", buf.String())
+		}
+
+		// Recent IPs JSON
+		buf.Reset()
+		opts.Command = "recent"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "192.168.1.107") {
+			t.Errorf("expected JSON recent IPs response, got: %s", buf.String())
+		}
+
+		// Device naming and room assignment JSON
+		buf.Reset()
+		opts.Command = "name Living Room Lamp"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"name": "Living Room Lamp"`) {
+			t.Errorf("expected JSON device rename output, got: %s", buf.String())
+		}
+
+		buf.Reset()
+		opts.Command = "room LivingRoom"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"room": "LivingRoom"`) {
+			t.Errorf("expected JSON room output, got: %s", buf.String())
+		}
+
+		// Batch group command JSON
+		buf.Reset()
+		opts.Command = "group LivingRoom warm"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"device_count": 1`) {
+			t.Errorf("expected JSON batch output, got: %s", buf.String())
+		}
+
+		// Connect IP JSON
+		buf.Reset()
+		opts.Command = "connect 192.168.1.200"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"ip": "192.168.1.200"`) {
+			t.Errorf("expected JSON connect IP output, got: %s", buf.String())
+		}
+
+		// Export JSON
+		exportFile := filepath.Join(tempDir, "json_export.json")
+		buf.Reset()
+		opts.Command = "export " + exportFile
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"action": "export"`) {
+			t.Errorf("expected JSON export output, got: %s", buf.String())
+		}
+
+		// Import JSON
+		buf.Reset()
+		opts.Command = "import " + exportFile
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"action": "import"`) {
+			t.Errorf("expected JSON import output, got: %s", buf.String())
+		}
+	})
 }
+
+
