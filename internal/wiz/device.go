@@ -80,13 +80,15 @@ func (d *Device) UpdateFromPilot(p PilotParams) {
 type DeviceRegistry struct {
 	mu           sync.RWMutex
 	devices      map[string]*Device
-	order        []string // Ordering of IPs for UI rendering
-	activeTarget string   // IP of currently focused bulb
+	aliases      map[string]string // Persistent alias mapping (IP/MAC -> Custom Name)
+	order        []string          // Ordering of IPs for UI rendering
+	activeTarget string            // IP of currently focused bulb
 }
 
 func NewDeviceRegistry() *DeviceRegistry {
 	reg := &DeviceRegistry{
 		devices: make(map[string]*Device),
+		aliases: make(map[string]string),
 	}
 	// Seed with FallbackIP
 	reg.AddOrUpdate(NewDevice(FallbackIP))
@@ -94,9 +96,36 @@ func NewDeviceRegistry() *DeviceRegistry {
 	return reg
 }
 
+// ApplyAliases sets multiple bulb alias mappings and updates existing matching devices.
+func (r *DeviceRegistry) ApplyAliases(aliases map[string]string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.aliases == nil {
+		r.aliases = make(map[string]string)
+	}
+	for k, v := range aliases {
+		r.aliases[k] = v
+	}
+
+	for _, dev := range r.devices {
+		if alias, ok := r.aliases[dev.IP]; ok && alias != "" {
+			dev.Name = alias
+		} else if dev.MAC != "" {
+			if alias, ok := r.aliases[dev.MAC]; ok && alias != "" {
+				dev.Name = alias
+			}
+		}
+	}
+}
+
 func (r *DeviceRegistry) AddOrUpdate(dev *Device) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.aliases == nil {
+		r.aliases = make(map[string]string)
+	}
 
 	if existing, found := r.devices[dev.IP]; found {
 		existing.LastSeen = time.Now()
@@ -104,7 +133,21 @@ func (r *DeviceRegistry) AddOrUpdate(dev *Device) {
 		if dev.MAC != "" {
 			existing.MAC = dev.MAC
 		}
+		if alias, ok := r.aliases[dev.IP]; ok && alias != "" {
+			existing.Name = alias
+		} else if dev.MAC != "" {
+			if alias, ok := r.aliases[dev.MAC]; ok && alias != "" {
+				existing.Name = alias
+			}
+		}
 	} else {
+		if alias, ok := r.aliases[dev.IP]; ok && alias != "" {
+			dev.Name = alias
+		} else if dev.MAC != "" {
+			if alias, ok := r.aliases[dev.MAC]; ok && alias != "" {
+				dev.Name = alias
+			}
+		}
 		r.devices[dev.IP] = dev
 		r.order = append(r.order, dev.IP)
 	}
@@ -144,6 +187,12 @@ func (r *DeviceRegistry) SetActive(ip string) bool {
 func (r *DeviceRegistry) SetName(ip string, name string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.aliases == nil {
+		r.aliases = make(map[string]string)
+	}
+	r.aliases[ip] = name
+
 	if dev, found := r.devices[ip]; found {
 		dev.Name = name
 		return true

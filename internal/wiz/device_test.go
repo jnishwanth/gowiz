@@ -95,4 +95,19 @@ func TestDeviceRegistry(t *testing.T) {
 			t.Errorf("device pilot update failed: %+v", dev)
 		}
 	})
+
+	t.Run("ApplyAliases mapping", func(t *testing.T) {
+		regAliases := NewDeviceRegistry()
+		regAliases.ApplyAliases(map[string]string{
+			"192.168.1.200": "Kitchen Ceiling",
+		})
+
+		devNew := NewDevice("192.168.1.200")
+		regAliases.AddOrUpdate(devNew)
+
+		fetched, ok := regAliases.Get("192.168.1.200")
+		if !ok || fetched.Name != "Kitchen Ceiling" {
+			t.Errorf("expected alias 'Kitchen Ceiling', got '%s' (ok: %v)", fetched.Name, ok)
+		}
+	})
 }

@@ -120,6 +120,13 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("Config command dispatch", func(t *testing.T) {
+		res := ExecuteCommand("config", dev)
+		if !res.ConfigInfo {
+			t.Errorf("expected ConfigInfo true for :config command")
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {

@@ -13,6 +13,7 @@ type CommandActionResult struct {
 	Help          bool
 	Scan          bool
 	Undo          bool
+	ConfigInfo    bool
 	StatusMsg     string
 	PilotParams   *wiz.PilotParams
 	SetSleepTimer int    // sleep timer in seconds, if > 0
@@ -336,6 +337,14 @@ func (r *CommandRegistry) registerDefaults() {
 	}
 	r.Register("name", nameHandler)
 	r.Register("rename", nameHandler)
+
+	// Config Status Verb
+	r.Register("config", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{
+			ConfigInfo: true,
+			StatusMsg:  "Querying configuration location and saved aliases...",
+		}
+	})
 
 	// Direct Scene Shortcut Verbs
 	sceneShortcuts := map[string]string{

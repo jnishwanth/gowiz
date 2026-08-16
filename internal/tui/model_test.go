@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -743,6 +744,50 @@ func TestTUIStateSynchronization(t *testing.T) {
 		m.clampDeviceCursor()
 		if m.deviceCursor >= len(m.Registry.List()) {
 			t.Errorf("expected clamped deviceCursor < len(list), got %d", m.deviceCursor)
+		}
+	})
+
+	t.Run("Config integration and persistent device naming", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "gowiz_test_model_config.json")
+
+		mockClient := wiz.NewMockClient()
+		mCfg := NewModelWithConfig(mockClient, "192.168.1.150", cfgPath)
+
+		// Run :name command to assign custom name
+		updated, _ := mCfg.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		mCfg = updated.(Model)
+		for _, r := range "name Office Ambient Light" {
+			updated, _ = mCfg.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			mCfg = updated.(Model)
+		}
+		updated, _ = mCfg.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		mCfg = updated.(Model)
+
+		activeDev, ok := mCfg.Registry.GetActive()
+		if !ok || activeDev.Name != "Office Ambient Light" {
+			t.Fatalf("expected active device name 'Office Ambient Light', got %q", activeDev.Name)
+		}
+
+		// Run :config command
+		updated, _ = mCfg.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		mCfg = updated.(Model)
+		for _, r := range "config" {
+			updated, _ = mCfg.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			mCfg = updated.(Model)
+		}
+		updated, _ = mCfg.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		mCfg = updated.(Model)
+
+		if !strings.Contains(mCfg.statusMessage, "Config:") {
+			t.Errorf("expected status message containing Config: info, got %q", mCfg.statusMessage)
+		}
+
+		// Instantiate a NEW Model with the same config file path to verify persistence across app restarts
+		mRestored := NewModelWithConfig(mockClient, "192.168.1.150", cfgPath)
+		restoredDev, ok := mRestored.Registry.Get("192.168.1.150")
+		if !ok || restoredDev.Name != "Office Ambient Light" {
+			t.Errorf("expected restored device name 'Office Ambient Light' from persistent config, got %q", restoredDev.Name)
 		}
 	})
 }

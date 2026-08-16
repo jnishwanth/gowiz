@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"wiz-tui/internal/config"
 	"wiz-tui/internal/tui/styles"
 	"wiz-tui/internal/tui/views"
 	"wiz-tui/internal/wiz"
@@ -16,6 +17,7 @@ import (
 type Model struct {
 	client         wiz.Client
 	Registry       *wiz.DeviceRegistry
+	configManager  *config.Manager
 	mode           Mode
 	activePanel    Panel
 	commandBuffer  string
@@ -31,24 +33,35 @@ type Model struct {
 	undoStack      map[string][]wiz.PilotParams
 }
 
-func NewModel(client wiz.Client, initialIP string) Model {
+func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) Model {
+	cfgMgr := config.NewManager(configPath)
+	_ = cfgMgr.Load()
+	cfg := cfgMgr.GetConfig()
+
 	reg := wiz.NewDeviceRegistry()
+	reg.ApplyAliases(cfg.DeviceAliases)
+
 	if initialIP != "" && initialIP != wiz.FallbackIP {
 		reg.AddOrUpdate(wiz.NewDevice(initialIP))
 		reg.SetActive(initialIP)
 	}
 
 	return Model{
-		client:       client,
-		Registry:     reg,
-		mode:         ModeNormal,
-		activePanel:  PanelDevices,
-		width:        80,
-		height:       24,
-		sceneCursor:  0,
-		deviceCursor: 0,
-		undoStack:    make(map[string][]wiz.PilotParams),
+		client:        client,
+		Registry:      reg,
+		configManager: cfgMgr,
+		mode:          ModeNormal,
+		activePanel:   PanelDevices,
+		width:         80,
+		height:        24,
+		sceneCursor:   0,
+		deviceCursor:  0,
+		undoStack:     make(map[string][]wiz.PilotParams),
 	}
+}
+
+func NewModel(client wiz.Client, initialIP string) Model {
+	return NewModelWithConfig(client, initialIP, "")
 }
 
 type ScanFinishedMsg []string
@@ -525,8 +538,22 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if res.ConfigInfo {
+			path := "~/.config/gowiz/config.json"
+			aliasCount := 0
+			if m.configManager != nil {
+				path = m.configManager.FilePath()
+				aliasCount = len(m.configManager.GetConfig().DeviceAliases)
+			}
+			m.setStatusMessage(fmt.Sprintf("Config: %s (%d saved alias(es))", path, aliasCount))
+			return m, nil
+		}
+
 		if res.NewDeviceName != "" && activeDev != nil {
 			m.Registry.SetName(activeDev.IP, res.NewDeviceName)
+			if m.configManager != nil {
+				_ = m.configManager.SetAlias(activeDev.IP, res.NewDeviceName)
+			}
 		}
 
 		if res.StatusMsg != "" {

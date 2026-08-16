@@ -48,7 +48,8 @@ func RenderHelpOverlay(width, height int) string {
 		{
 			Title: "Command Mode (:) & Search (/)",
 			Keys: [][2]string{
-				{":name <alias>", "Rename active light (e.g. :name Desk Lamp)"},
+				{":name <alias>", "Rename active light & persist to config file"},
+				{":config", "Display configuration status & saved alias count"},
 				{":scene <name|id>", "Activate dynamic scene (e.g. :scene sunset)"},
 				{":ocean / :sunset", "Quick scene shortcuts (:party, :cozy, :fireplace...)"},
 				{":speed <20-200>", "Set dynamic scene speed percentage"},
