@@ -393,4 +393,3 @@ func (m *Manager) ImportFromFile(srcPath string) error {
 
 	return m.Save()
 }
-

@@ -314,4 +314,3 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 }
-

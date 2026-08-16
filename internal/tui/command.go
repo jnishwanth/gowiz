@@ -569,7 +569,6 @@ func (r *CommandRegistry) registerDefaults() {
 	r.Register("import", importHandler)
 	r.Register("restore", importHandler)
 
-
 	// IP Target / Connect Verbs
 	ipHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
 		if len(args) == 0 {

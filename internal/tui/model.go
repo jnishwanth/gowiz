@@ -736,7 +736,6 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-
 		if res.ShowRecent {
 			if m.configManager != nil {
 				recents := m.configManager.GetRecentIPs()

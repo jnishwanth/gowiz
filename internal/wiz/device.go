@@ -119,7 +119,6 @@ func (d *Device) SignalBar() string {
 	return fmt.Sprintf("📶 %d%% (%d dBm)", d.SignalPercentage(), d.Rssi)
 }
 
-
 // DeviceRegistry provides a thread-safe store for discovered devices
 type DeviceRegistry struct {
 	mu           sync.RWMutex

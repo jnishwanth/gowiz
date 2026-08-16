@@ -167,4 +167,3 @@ func TestDeviceRegistry(t *testing.T) {
 		}
 	})
 }
-

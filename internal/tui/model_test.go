@@ -1146,4 +1146,3 @@ func TestInfoAndExportImportInModel(t *testing.T) {
 		t.Errorf("expected import confirmation status message, got %q", m.statusMessage)
 	}
 }
-
