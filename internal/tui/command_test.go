@@ -91,6 +91,35 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("Device naming command", func(t *testing.T) {
+		res := ExecuteCommand("name Desk Light", dev)
+		if res.NewDeviceName != "Desk Light" {
+			t.Errorf("expected NewDeviceName 'Desk Light', got %q", res.NewDeviceName)
+		}
+
+		resUsage := ExecuteCommand("name", dev)
+		if resUsage.StatusMsg != "Usage: :name <custom name>" {
+			t.Errorf("expected usage message on empty args")
+		}
+
+		resRename := ExecuteCommand("rename Reading Lamp", dev)
+		if resRename.NewDeviceName != "Reading Lamp" {
+			t.Errorf("expected NewDeviceName 'Reading Lamp' via :rename alias")
+		}
+	})
+
+	t.Run("Direct scene shortcut commands", func(t *testing.T) {
+		ocean := ExecuteCommand("ocean", dev)
+		if ocean.PilotParams == nil || *ocean.PilotParams.SceneID != 1 {
+			t.Errorf("expected SceneID 1 for :ocean command, got %v", ocean.PilotParams)
+		}
+
+		fireplace := ExecuteCommand("fireplace", dev)
+		if fireplace.PilotParams == nil || *fireplace.PilotParams.SceneID != 5 {
+			t.Errorf("expected SceneID 5 for :fireplace command, got %v", fireplace.PilotParams)
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {

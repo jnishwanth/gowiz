@@ -525,6 +525,10 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if res.NewDeviceName != "" && activeDev != nil {
+			m.Registry.SetName(activeDev.IP, res.NewDeviceName)
+		}
+
 		if res.StatusMsg != "" {
 			m.setStatusMessage(res.StatusMsg)
 		}

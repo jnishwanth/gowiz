@@ -48,7 +48,9 @@ func RenderHelpOverlay(width, height int) string {
 		{
 			Title: "Command Mode (:) & Search (/)",
 			Keys: [][2]string{
+				{":name <alias>", "Rename active light (e.g. :name Desk Lamp)"},
 				{":scene <name|id>", "Activate dynamic scene (e.g. :scene sunset)"},
+				{":ocean / :sunset", "Quick scene shortcuts (:party, :cozy, :fireplace...)"},
 				{":speed <20-200>", "Set dynamic scene speed percentage"},
 				{":temp <2200-6500>", "Set Color Temperature in Kelvin"},
 				{":warm / :cool", "Quick color temperature presets (2700K / 4200K)"},

@@ -141,6 +141,16 @@ func (r *DeviceRegistry) SetActive(ip string) bool {
 	return false
 }
 
+func (r *DeviceRegistry) SetName(ip string, name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if dev, found := r.devices[ip]; found {
+		dev.Name = name
+		return true
+	}
+	return false
+}
+
 func (r *DeviceRegistry) List() []*Device {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

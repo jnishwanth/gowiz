@@ -15,7 +15,8 @@ type CommandActionResult struct {
 	Undo          bool
 	StatusMsg     string
 	PilotParams   *wiz.PilotParams
-	SetSleepTimer int // sleep timer in seconds, if > 0
+	SetSleepTimer int    // sleep timer in seconds, if > 0
+	NewDeviceName string // custom device name to set on active device, if non-empty
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -318,4 +319,48 @@ func (r *CommandRegistry) registerDefaults() {
 	}
 	r.Register("u", undoHandler)
 	r.Register("undo", undoHandler)
+
+	// Device Custom Naming / Aliasing
+	nameHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{StatusMsg: "Usage: :name <custom name>"}
+		}
+		newName := strings.Join(args, " ")
+		if activeDev != nil {
+			return CommandActionResult{
+				NewDeviceName: newName,
+				StatusMsg:     fmt.Sprintf("Renamed light [%s] to '%s'", activeDev.IP, newName),
+			}
+		}
+		return CommandActionResult{StatusMsg: "No active device to rename."}
+	}
+	r.Register("name", nameHandler)
+	r.Register("rename", nameHandler)
+
+	// Direct Scene Shortcut Verbs
+	sceneShortcuts := map[string]string{
+		"ocean":      "Ocean",
+		"sunset":     "Sunset",
+		"party":      "Party",
+		"cozy":       "Cozy",
+		"forest":     "Forest",
+		"fireplace":  "Fireplace",
+		"romance":    "Romance",
+		"relax":      "Relax",
+		"focus":      "Focus",
+		"nightlight": "Night light",
+	}
+	for verb, sceneName := range sceneShortcuts {
+		scName := sceneName
+		r.Register(verb, func(args []string, activeDev *wiz.Device) CommandActionResult {
+			if sc, found := wiz.GetSceneByName(scName); found {
+				params := wiz.NewSceneParams(sc.ID)
+				return CommandActionResult{
+					StatusMsg:   fmt.Sprintf("Scene set: %s", sc.Name),
+					PilotParams: &params,
+				}
+			}
+			return CommandActionResult{StatusMsg: fmt.Sprintf("Scene not found: %s", scName)}
+		})
+	}
 }

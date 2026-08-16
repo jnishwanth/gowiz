@@ -705,6 +705,39 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected temp 2700 after :warm, got %d", dev.Temp)
 		}
 
+		// Test :name command in model
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "name Studio Desk Lamp" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		dev, _ = m.Registry.GetActive()
+		if dev.Name != "Studio Desk Lamp" {
+			t.Errorf("expected device name 'Studio Desk Lamp', got %q", dev.Name)
+		}
+
+		// Test :ocean scene shortcut command in model
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "ocean" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.SceneID != 1 {
+			t.Errorf("expected scene ID 1 after :ocean, got %d", dev.SceneID)
+		}
+
 		// Test clampDeviceCursor
 		m.deviceCursor = 99
 		m.clampDeviceCursor()

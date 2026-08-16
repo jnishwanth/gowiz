@@ -36,6 +36,22 @@ func TestDeviceRegistry(t *testing.T) {
 		}
 	})
 
+	t.Run("SetName custom name", func(t *testing.T) {
+		ok := reg.SetName("192.168.1.120", "Desk Lamp")
+		if !ok {
+			t.Errorf("expected SetName to succeed for existing IP")
+		}
+		dev, _ := reg.Get("192.168.1.120")
+		if dev.Name != "Desk Lamp" {
+			t.Errorf("expected device name 'Desk Lamp', got '%s'", dev.Name)
+		}
+
+		fail := reg.SetName("10.0.0.99", "Non Existent")
+		if fail {
+			t.Errorf("expected SetName to return false for non-existent IP")
+		}
+	})
+
 	t.Run("Multi-selection logic", func(t *testing.T) {
 		reg.ToggleSelection("192.168.1.120")
 		selected := reg.GetSelectedOrActive()
