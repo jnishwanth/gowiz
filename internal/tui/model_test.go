@@ -1060,3 +1060,28 @@ func TestTUIFadeTransitions(t *testing.T) {
 		t.Errorf("expected fade completion status message, got %q", m.statusMessage)
 	}
 }
+
+func TestCategoryCommandInModel(t *testing.T) {
+	mock := wiz.NewMockClient()
+	m := NewModelWithConfig(mock, "192.168.1.50", "")
+
+	// Dispatch :cat Nature command
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	m = updated.(Model)
+	for _, r := range "cat Nature" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.searchQuery != "Nature" {
+		t.Errorf("expected searchQuery 'Nature', got %q", m.searchQuery)
+	}
+	if m.activePanel != PanelScenes {
+		t.Errorf("expected activePanel PanelScenes after :cat command, got %v", m.activePanel)
+	}
+	if !strings.Contains(m.statusMessage, "Filtered scenes by category") {
+		t.Errorf("expected category status message, got %q", m.statusMessage)
+	}
+}

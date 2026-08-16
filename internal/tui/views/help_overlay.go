@@ -58,6 +58,8 @@ func RenderHelpOverlay(width, height int) string {
 				{":recent", "List recently targeted bulb IP addresses"},
 				{":config", "Display configuration status & saved alias count"},
 				{":scene <name|id>", "Activate dynamic scene (e.g. :scene sunset)"},
+				{":cat <category>", "Filter scenes by category (Nature, Cozy, White...)"},
+				{":categories", "List all available scene categories"},
 				{":ocean / :sunset", "Quick scene shortcuts (:party, :cozy, :fireplace...)"},
 				{":speed <20-200>", "Set dynamic scene speed percentage"},
 				{":temp <2200-6500>", "Set Color Temperature in Kelvin"},

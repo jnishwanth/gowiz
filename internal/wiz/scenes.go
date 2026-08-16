@@ -103,3 +103,31 @@ func FilterScenes(query string) []Scene {
 	}
 	return matched
 }
+
+// GetSceneCategories returns a list of unique scene categories.
+func GetSceneCategories() []string {
+	var categories []string
+	seen := make(map[string]bool)
+	for _, s := range AllScenes {
+		if s.Category != "" && !seen[s.Category] {
+			seen[s.Category] = true
+			categories = append(categories, s.Category)
+		}
+	}
+	return categories
+}
+
+// FilterScenesByCategory returns scenes belonging to a specific category (case-insensitive).
+func FilterScenesByCategory(category string) []Scene {
+	catLower := strings.ToLower(strings.TrimSpace(category))
+	if catLower == "" {
+		return AllScenes
+	}
+	var matched []Scene
+	for _, s := range AllScenes {
+		if strings.ToLower(s.Category) == catLower {
+			matched = append(matched, s)
+		}
+	}
+	return matched
+}

@@ -59,4 +59,21 @@ func TestScenes(t *testing.T) {
 			t.Errorf("expected all 34 scenes on empty query, got %d", len(all))
 		}
 	})
+
+	t.Run("GetSceneCategories and FilterScenesByCategory", func(t *testing.T) {
+		cats := GetSceneCategories()
+		if len(cats) == 0 {
+			t.Fatalf("expected non-empty categories slice")
+		}
+
+		natureScenes := FilterScenesByCategory("Nature")
+		if len(natureScenes) == 0 {
+			t.Errorf("expected matching scenes for category Nature")
+		}
+
+		emptyCategoryScenes := FilterScenesByCategory("")
+		if len(emptyCategoryScenes) != 34 {
+			t.Errorf("expected 34 scenes on empty category filter, got %d", len(emptyCategoryScenes))
+		}
+	})
 }

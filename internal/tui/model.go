@@ -705,6 +705,23 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if res.ListCategories {
+			if res.StatusMsg != "" {
+				m.setStatusMessage(res.StatusMsg)
+			}
+			return m, nil
+		}
+
+		if res.SetSearchQuery != "" {
+			m.searchQuery = res.SetSearchQuery
+			m.clampSceneCursor()
+			if res.FocusScenes {
+				m.activePanel = PanelScenes
+			}
+		} else if res.FocusScenes {
+			m.activePanel = PanelScenes
+		}
+
 		if res.SavePresetName != "" && activeDev != nil {
 			preset := PresetFromDevice(activeDev)
 			if m.configManager != nil {

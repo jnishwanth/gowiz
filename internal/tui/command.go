@@ -18,6 +18,7 @@ type CommandActionResult struct {
 	ConfigInfo       bool
 	ShowRecent       bool
 	ListPresets      bool
+	ListCategories   bool
 	StatusMsg        string
 	PilotParams      *wiz.PilotParams
 	SetSleepTimer    int    // sleep timer in seconds, if > 0
@@ -28,6 +29,8 @@ type CommandActionResult struct {
 	ApplyPresetName  string // preset name to apply, if non-empty
 	TargetRoom       string // target room group name for batch room commands, if non-empty
 	TargetIP         string // target bulb IP to add/connect to
+	SetSearchQuery   string // scene filter query to set, if non-empty
+	FocusScenes      bool   // whether to focus scene picker panel
 	SetFadeDimming   int    // target dimming level (1-100, or 0 for off fade)
 	SetFadeDuration  int    // duration of smooth transition in seconds
 	SetFadeColorTemp int    // target color temperature in Kelvin (0 if none)
@@ -660,6 +663,39 @@ func (r *CommandRegistry) registerDefaults() {
 	r.Register("preset", presetHandler)
 	r.Register("presets", func(args []string, activeDev *wiz.Device) CommandActionResult {
 		return CommandActionResult{ListPresets: true}
+	})
+
+	// Scene Category Verbs
+	categoryHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			cats := wiz.GetSceneCategories()
+			return CommandActionResult{
+				ListCategories: true,
+				StatusMsg:      fmt.Sprintf("Categories (%d): %s", len(cats), strings.Join(cats, ", ")),
+			}
+		}
+		catQuery := strings.Join(args, " ")
+		matched := wiz.FilterScenesByCategory(catQuery)
+		if len(matched) == 0 {
+			matched = wiz.FilterScenes(catQuery)
+		}
+		if len(matched) == 0 {
+			return CommandActionResult{StatusMsg: fmt.Sprintf("No scenes found matching category '%s'", catQuery)}
+		}
+		return CommandActionResult{
+			SetSearchQuery: catQuery,
+			FocusScenes:    true,
+			StatusMsg:      fmt.Sprintf("Filtered scenes by category '%s' (%d match(es))", catQuery, len(matched)),
+		}
+	}
+	r.Register("category", categoryHandler)
+	r.Register("cat", categoryHandler)
+	r.Register("categories", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		cats := wiz.GetSceneCategories()
+		return CommandActionResult{
+			ListCategories: true,
+			StatusMsg:      fmt.Sprintf("Categories (%d): %s", len(cats), strings.Join(cats, ", ")),
+		}
 	})
 
 	// Direct Scene Shortcut Verbs

@@ -242,6 +242,29 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("Category command dispatches", func(t *testing.T) {
+		resList := ExecuteCommand("categories", dev)
+		if !resList.ListCategories {
+			t.Errorf("expected ListCategories true for :categories")
+		}
+
+		resCatList := ExecuteCommand("cat", dev)
+		if !resCatList.ListCategories {
+			t.Errorf("expected ListCategories true for empty :cat")
+		}
+
+		resCategoryNature := ExecuteCommand("category Nature", dev)
+		if resCategoryNature.SetSearchQuery != "Nature" || !resCategoryNature.FocusScenes {
+			t.Errorf("expected SetSearchQuery 'Nature' and FocusScenes true for :category Nature, got SetSearchQuery: '%s', FocusScenes: %v",
+				resCategoryNature.SetSearchQuery, resCategoryNature.FocusScenes)
+		}
+
+		resCatCozy := ExecuteCommand("cat Cozy", dev)
+		if resCatCozy.SetSearchQuery != "Cozy" || !resCatCozy.FocusScenes {
+			t.Errorf("expected SetSearchQuery 'Cozy' and FocusScenes true for :cat Cozy")
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {
