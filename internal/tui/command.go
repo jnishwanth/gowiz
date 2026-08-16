@@ -28,6 +28,10 @@ type CommandActionResult struct {
 	SetSleepTimer    int                  // sleep timer in seconds, if > 0
 	NewDeviceName    string               // custom device name to set on active device, if non-empty
 	SetDeviceRoom    string               // custom room name to set on active device ("CLEAR" to remove), if non-empty
+	SetGroupName     string               // custom group name to set/create, if non-empty
+	SetGroupMembers  []string             // member IPs or names for group creation
+	DeleteGroupName  string               // custom group name to delete, if non-empty
+	ListGroups       bool                 // whether to list custom device groups
 	SavePresetName   string               // custom preset name to save active state under, if non-empty
 	DeletePresetName string               // custom preset name to delete, if non-empty
 	ApplyPresetName  string               // preset name to apply, if non-empty
@@ -682,7 +686,36 @@ func (r *CommandRegistry) registerDefaults() {
 
 	groupHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
 		if len(args) == 0 {
-			return CommandActionResult{StatusMsg: "Usage: :group <room name> <action> (e.g. :group Living Room on)"}
+			return CommandActionResult{StatusMsg: "Usage: :group <name> <action> | :group set <name> <ip1 ip2...> | :group delete <name> | :group list"}
+		}
+
+		sub := strings.ToLower(args[0])
+		if sub == "list" {
+			return CommandActionResult{ListGroups: true}
+		}
+
+		if sub == "create" || sub == "set" || sub == "add" {
+			if len(args) < 3 {
+				return CommandActionResult{StatusMsg: "Usage: :group set <group_name> <member1> [member2...]"}
+			}
+			groupName := strings.ToLower(args[1])
+			members := args[2:]
+			return CommandActionResult{
+				SetGroupName:    groupName,
+				SetGroupMembers: members,
+				StatusMsg:       fmt.Sprintf("Creating group '%s' with %d member(s)...", groupName, len(members)),
+			}
+		}
+
+		if sub == "delete" || sub == "rm" || sub == "remove" {
+			if len(args) < 2 {
+				return CommandActionResult{StatusMsg: "Usage: :group delete <group_name>"}
+			}
+			groupName := strings.ToLower(args[1])
+			return CommandActionResult{
+				DeleteGroupName: groupName,
+				StatusMsg:       fmt.Sprintf("Deleting group '%s'...", groupName),
+			}
 		}
 
 		subIdx := -1
@@ -709,7 +742,7 @@ func (r *CommandRegistry) registerDefaults() {
 			subRes := r.Execute(subCmdStr, activeDev)
 			subRes.TargetRoom = roomName
 			if subRes.PilotParams != nil || subRes.ApplyPresetName != "" {
-				subRes.StatusMsg = fmt.Sprintf("Group command '%s' sent to room '%s'", strings.TrimSpace(subCmdStr), roomName)
+				subRes.StatusMsg = fmt.Sprintf("Group command '%s' sent to group/room '%s'", strings.TrimSpace(subCmdStr), roomName)
 			}
 			return subRes
 		}

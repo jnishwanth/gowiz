@@ -839,9 +839,13 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 
 			targets := m.Registry.GetSelectedOrActive()
 			if res.TargetRoom != "" {
-				targets = m.Registry.GetDevicesByRoom(res.TargetRoom)
+				var groups map[string][]string
+				if m.configManager != nil {
+					groups = m.configManager.GetGroups()
+				}
+				targets = m.Registry.GetDevicesByGroupOrRoom(res.TargetRoom, groups)
 				if len(targets) == 0 {
-					m.setStatusMessage(fmt.Sprintf("No devices found in room '%s'", res.TargetRoom))
+					m.setStatusMessage(fmt.Sprintf("No devices found in group/room '%s'", res.TargetRoom))
 					return m, nil
 				}
 			}
@@ -852,6 +856,42 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 				m.setStatusMessage(fmt.Sprintf("Activated preset '%s'", res.ApplyPresetName))
 			}
 			return m, m.dispatchPilotCmdToDevices(targets, params)
+		}
+
+		if res.SetGroupName != "" && len(res.SetGroupMembers) > 0 {
+			if m.configManager != nil {
+				_ = m.configManager.SetGroup(res.SetGroupName, res.SetGroupMembers)
+				m.setStatusMessage(fmt.Sprintf("Created group '%s' with %d member(s)", res.SetGroupName, len(res.SetGroupMembers)))
+			} else {
+				m.setStatusMessage("Config manager unavailable; group not saved.")
+			}
+			return m, nil
+		}
+
+		if res.DeleteGroupName != "" {
+			if m.configManager != nil {
+				_ = m.configManager.DeleteGroup(res.DeleteGroupName)
+				m.setStatusMessage(fmt.Sprintf("Deleted group '%s'", res.DeleteGroupName))
+			} else {
+				m.setStatusMessage("Config manager unavailable; group not deleted.")
+			}
+			return m, nil
+		}
+
+		if res.ListGroups {
+			if m.configManager != nil {
+				groups := m.configManager.GetGroups()
+				if len(groups) == 0 {
+					m.setStatusMessage("No custom device groups configured.")
+				} else {
+					names := make([]string, 0, len(groups))
+					for g := range groups {
+						names = append(names, g)
+					}
+					m.setStatusMessage(fmt.Sprintf("Groups (%d): %s", len(groups), strings.Join(names, ", ")))
+				}
+			}
+			return m, nil
 		}
 
 		if res.TargetIP != "" {
@@ -890,9 +930,13 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 		}
 
 		if res.TargetRoom != "" {
-			roomDevs := m.Registry.GetDevicesByRoom(res.TargetRoom)
+			var groups map[string][]string
+			if m.configManager != nil {
+				groups = m.configManager.GetGroups()
+			}
+			roomDevs := m.Registry.GetDevicesByGroupOrRoom(res.TargetRoom, groups)
 			if len(roomDevs) == 0 {
-				m.setStatusMessage(fmt.Sprintf("No devices found in room '%s'", res.TargetRoom))
+				m.setStatusMessage(fmt.Sprintf("No devices found in group/room '%s'", res.TargetRoom))
 				return m, nil
 			}
 			if res.PilotParams != nil {
@@ -901,7 +945,7 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 				}
 				return m, m.dispatchPilotCmdToDevices(roomDevs, *res.PilotParams)
 			}
-			m.setStatusMessage(fmt.Sprintf("Room '%s' has %d device(s)", res.TargetRoom, len(roomDevs)))
+			m.setStatusMessage(fmt.Sprintf("Group/room '%s' has %d device(s)", res.TargetRoom, len(roomDevs)))
 			return m, nil
 		}
 

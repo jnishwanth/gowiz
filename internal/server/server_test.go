@@ -790,3 +790,72 @@ func TestServerEffects(t *testing.T) {
 		}
 	})
 }
+
+func TestServerGroups(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET /api/v1/groups initial empty", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/groups")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/groups: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("POST /api/v1/groups create group", func(t *testing.T) {
+		payload := map[string]any{
+			"name":    "desk",
+			"members": []string{"192.168.1.50"},
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		resp, err := http.Post(ts.URL+"/api/v1/groups", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/groups: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("GET /api/v1/groups/desk detail", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/groups/desk")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/groups/desk: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		members, ok := res["members"].([]any)
+		if !ok || len(members) != 1 {
+			t.Errorf("expected 1 member in desk group, got %v", res["members"])
+		}
+	})
+
+	t.Run("DELETE /api/v1/groups/desk", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/groups/desk", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed DELETE /api/v1/groups/desk: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+}

@@ -378,3 +378,44 @@ func (r *DeviceRegistry) GetDevicesByRoom(room string) []*Device {
 	}
 	return result
 }
+
+// GetDevicesByGroup returns devices matching members in a custom group map.
+func (r *DeviceRegistry) GetDevicesByGroup(group string, groups map[string][]string) []*Device {
+	groupKey := strings.ToLower(strings.TrimSpace(group))
+	if len(groups) == 0 {
+		return nil
+	}
+	members, found := groups[groupKey]
+	if !found || len(members) == 0 {
+		return nil
+	}
+
+	memberMap := make(map[string]bool)
+	for _, m := range members {
+		memberMap[strings.ToLower(strings.TrimSpace(m))] = true
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*Device
+	for _, ip := range r.order {
+		if dev, found := r.devices[ip]; found {
+			matched := memberMap[strings.ToLower(dev.IP)] ||
+				(dev.MAC != "" && memberMap[strings.ToLower(dev.MAC)]) ||
+				(dev.Name != "" && memberMap[strings.ToLower(dev.Name)])
+			if matched {
+				result = append(result, dev)
+			}
+		}
+	}
+	return result
+}
+
+// GetDevicesByGroupOrRoom resolves devices by custom group first, falling back to room name matching.
+func (r *DeviceRegistry) GetDevicesByGroupOrRoom(target string, groups map[string][]string) []*Device {
+	if devs := r.GetDevicesByGroup(target, groups); len(devs) > 0 {
+		return devs
+	}
+	return r.GetDevicesByRoom(target)
+}

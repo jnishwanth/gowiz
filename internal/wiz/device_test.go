@@ -166,4 +166,30 @@ func TestDeviceRegistry(t *testing.T) {
 			t.Errorf("expected -20 dBm clamped to 100%% Excellent, got %d%% %s", dev.SignalPercentage(), dev.SignalQuality())
 		}
 	})
+
+	t.Run("GetDevicesByGroup and GetDevicesByGroupOrRoom", func(t *testing.T) {
+		regGroup := NewDeviceRegistry()
+		d1 := NewDevice("192.168.1.50")
+		d1.Name = "Desk Light 1"
+		d2 := NewDevice("192.168.1.51")
+		d2.Room = "Office"
+
+		regGroup.AddOrUpdate(d1)
+		regGroup.AddOrUpdate(d2)
+
+		groups := map[string][]string{
+			"desk": {"192.168.1.50"},
+		}
+
+		gDevs := regGroup.GetDevicesByGroup("Desk", groups)
+		if len(gDevs) != 1 || gDevs[0].IP != "192.168.1.50" {
+			t.Errorf("expected 1 group device, got %v", gDevs)
+		}
+
+		// Test fallback to room via GetDevicesByGroupOrRoom
+		rDevs := regGroup.GetDevicesByGroupOrRoom("Office", groups)
+		if len(rDevs) != 1 || rDevs[0].IP != "192.168.1.51" {
+			t.Errorf("expected fallback room device 192.168.1.51, got %v", rDevs)
+		}
+	})
 }

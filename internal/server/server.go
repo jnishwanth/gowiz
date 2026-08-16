@@ -115,6 +115,8 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/api/v1/health", s.wrapFunc(s.handleHealth, false))
 	mux.Handle("/api/v1/devices", s.wrapFunc(s.handleDevices, true))
 	mux.Handle("/api/v1/rooms", s.wrapFunc(s.handleRooms, true))
+	mux.Handle("/api/v1/groups", s.wrapFunc(s.handleGroups, true))
+	mux.Handle("/api/v1/groups/", s.wrapFunc(s.handleGroupDetail, true))
 	mux.Handle("/api/v1/openapi.json", s.wrapFunc(s.handleOpenAPI, false))
 	mux.Handle("/docs", s.wrapFunc(s.handleDocs, false))
 	mux.Handle("/api/v1/docs", s.wrapFunc(s.handleDocs, false))
@@ -228,10 +230,103 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleGroups(w http.ResponseWriter, req *http.Request) {
+	if s.cfg.ConfigMgr == nil {
+		writeError(w, http.StatusServiceUnavailable, "config manager unavailable")
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		groups := s.cfg.ConfigMgr.GetGroups()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "ok",
+			"groups": groups,
+			"count":  len(groups),
+		})
+	case http.MethodPost:
+		type GroupReq struct {
+			Name    string   `json:"name"`
+			Members []string `json:"members"`
+		}
+		var rBody GroupReq
+		if err := json.NewDecoder(req.Body).Decode(&rBody); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if rBody.Name == "" {
+			writeError(w, http.StatusBadRequest, "group name cannot be empty")
+			return
+		}
+		if err := s.cfg.ConfigMgr.SetGroup(rBody.Name, rBody.Members); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.broadcaster.Publish(Event{
+			Type:    "group_saved",
+			Status:  "ok",
+			Payload: rBody,
+		})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"action":  "saved",
+			"group":   rBody.Name,
+			"members": rBody.Members,
+		})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleGroupDetail(w http.ResponseWriter, req *http.Request) {
+	if s.cfg.ConfigMgr == nil {
+		writeError(w, http.StatusServiceUnavailable, "config manager unavailable")
+		return
+	}
+
+	groupName := strings.TrimPrefix(req.URL.Path, "/api/v1/groups/")
+	if groupName == "" {
+		writeError(w, http.StatusBadRequest, "group name required in path")
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		members, found := s.cfg.ConfigMgr.GetGroup(groupName)
+		if !found {
+			writeError(w, http.StatusNotFound, "group not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"group":   groupName,
+			"members": members,
+		})
+	case http.MethodDelete:
+		if err := s.cfg.ConfigMgr.DeleteGroup(groupName); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.broadcaster.Publish(Event{
+			Type:    "group_deleted",
+			Status:  "ok",
+			Payload: groupName,
+		})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "ok",
+			"action": "deleted",
+			"group":  groupName,
+		})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 // PilotRequest defines the JSON structure for controlling lights via HTTP POST /api/v1/pilot.
 type PilotRequest struct {
 	IP      string `json:"ip,omitempty"`
 	Room    string `json:"room,omitempty"`
+	Group   string `json:"group,omitempty"`
 	State   *bool  `json:"state,omitempty"`
 	Dimming *int   `json:"dimming,omitempty"`
 	Temp    *int   `json:"temp,omitempty"`
@@ -269,10 +364,18 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	ctx := r.Context()
-	if req.Room != "" {
-		targets := s.cfg.DevRegistry.GetDevicesByRoom(req.Room)
+	targetGroup := req.Group
+	if targetGroup == "" {
+		targetGroup = req.Room
+	}
+	if targetGroup != "" {
+		var groups map[string][]string
+		if s.cfg.ConfigMgr != nil {
+			groups = s.cfg.ConfigMgr.GetGroups()
+		}
+		targets := s.cfg.DevRegistry.GetDevicesByGroupOrRoom(targetGroup, groups)
 		if len(targets) == 0 {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found in room '%s'", req.Room))
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found in group/room '%s'", targetGroup))
 			return
 		}
 		ips := make([]string, len(targets))
@@ -287,20 +390,20 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if failed > 0 {
-			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send pilot to %d/%d devices in room '%s'", failed, len(ips), req.Room))
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send pilot to %d/%d devices in group/room '%s'", failed, len(ips), targetGroup))
 			return
 		}
 
 		s.broadcaster.Publish(Event{
 			Type:    EventDeviceUpdated,
-			Room:    req.Room,
+			Room:    targetGroup,
 			Status:  "ok",
 			Payload: params,
 		})
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":       "ok",
-			"room":         req.Room,
+			"target":       targetGroup,
 			"devicesCount": len(ips),
 		})
 		return

@@ -428,3 +428,54 @@ func TestConfigManagerRoomCircadianPhases(t *testing.T) {
 		t.Errorf("expected error when setting room circadian phase with empty room name")
 	}
 }
+
+func TestConfigManagerDeviceGroups(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "groups_test.json")
+
+	mgr := config.NewManager(cfgPath)
+
+	err := mgr.SetGroup("DeskArea", []string{"192.168.1.10", "192.168.1.11", "192.168.1.10"})
+	if err != nil {
+		t.Fatalf("Failed to set group: %v", err)
+	}
+
+	members, found := mgr.GetGroup("deskarea")
+	if !found {
+		t.Fatalf("Expected group 'deskarea' to be found")
+	}
+	if len(members) != 2 || members[0] != "192.168.1.10" || members[1] != "192.168.1.11" {
+		t.Errorf("Unexpected group members (deduplicated): %v", members)
+	}
+
+	groups := mgr.GetGroups()
+	if len(groups) != 1 || len(groups["deskarea"]) != 2 {
+		t.Errorf("Unexpected GetGroups result: %v", groups)
+	}
+
+	// Verify persistence
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+
+	m2, found2 := mgr2.GetGroup("DeskArea")
+	if !found2 || len(m2) != 2 {
+		t.Errorf("Expected reloaded group 'DeskArea' with 2 members, got %v (found: %v)", m2, found2)
+	}
+
+	// Delete group
+	if err := mgr2.DeleteGroup("deskarea"); err != nil {
+		t.Fatalf("Failed to delete group: %v", err)
+	}
+
+	_, foundDeleted := mgr2.GetGroup("deskarea")
+	if foundDeleted {
+		t.Errorf("Expected deleted group to no longer exist")
+	}
+
+	// Test error on empty group name
+	if err := mgr.SetGroup("", []string{"192.168.1.10"}); err == nil {
+		t.Errorf("Expected error setting group with empty name")
+	}
+}

@@ -50,7 +50,10 @@ func RenderHelpOverlay(width, height int) string {
 			Keys: [][2]string{
 				{":name <alias>", "Rename active light & persist to config file"},
 				{":room <room>", "Assign room to active light (or :room clear)"},
-				{":group <room> <cmd>", "Batch control room group (e.g. :group Living Room on)"},
+				{":group <name> <cmd>", "Batch control group/room (e.g. :group Desk on)"},
+				{":group set <n> <ip...>", "Create custom multi-device group (e.g. :group set desk 192.168.1.50...)"},
+				{":group delete <n>", "Delete custom device group"},
+				{":group list", "List all configured custom device groups"},
 				{":preset <name>", "Apply preset (evening, movie, night, focus, relax...)"},
 				{":preset save <name>", "Save active light state as custom preset"},
 				{":presets", "List all built-in and saved custom presets"},

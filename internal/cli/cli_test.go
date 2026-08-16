@@ -90,7 +90,7 @@ func TestCLIRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(buf.String(), "Successfully sent command to room 'Office'") {
+		if !strings.Contains(buf.String(), "Successfully sent command to group/room 'Office'") {
 			t.Errorf("unexpected output: %s", buf.String())
 		}
 	})
@@ -450,7 +450,7 @@ func TestCLIRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(buf.String(), "Successfully sent command to room 'Bedroom'") {
+		if !strings.Contains(buf.String(), "Successfully sent command to group/room 'Bedroom'") {
 			t.Errorf("expected output to contain room batch success message, got: %s", buf.String())
 		}
 	})
@@ -593,6 +593,46 @@ func TestCLIRun(t *testing.T) {
 		}
 		if !strings.Contains(buf.String(), `"effect": "pulse"`) {
 			t.Errorf("expected pulse JSON output, got: %s", buf.String())
+		}
+	})
+
+	t.Run("Group_set_delete_and_list", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Command:    "group set desk 192.168.1.100 192.168.1.101",
+			Writer:     &buf,
+		}
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected group set error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Created group 'desk'") {
+			t.Errorf("expected created group message, got: %s", buf.String())
+		}
+
+		buf.Reset()
+		opts.Command = "group list"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected group list error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "desk:") {
+			t.Errorf("expected group list to contain 'desk:', got: %s", buf.String())
+		}
+
+		buf.Reset()
+		opts.Command = "group delete desk"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected group delete error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Deleted group 'desk'") {
+			t.Errorf("expected deleted group message, got: %s", buf.String())
 		}
 	})
 }

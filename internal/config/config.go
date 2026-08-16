@@ -26,6 +26,7 @@ type Preset struct {
 type Config struct {
 	DeviceAliases       map[string]string                    `json:"device_aliases"`
 	DeviceRooms         map[string]string                    `json:"device_rooms,omitempty"`
+	DeviceGroups        map[string][]string                  `json:"device_groups,omitempty"`
 	Presets             map[string]Preset                    `json:"presets,omitempty"`
 	CircadianPhases     []circadian.SchedulePhase            `json:"circadian_phases,omitempty"`
 	RoomCircadianPhases map[string][]circadian.SchedulePhase `json:"room_circadian_phases,omitempty"`
@@ -46,6 +47,7 @@ func DefaultConfig() Config {
 	return Config{
 		DeviceAliases:       make(map[string]string),
 		DeviceRooms:         make(map[string]string),
+		DeviceGroups:        make(map[string][]string),
 		Presets:             make(map[string]Preset),
 		RoomCircadianPhases: make(map[string][]circadian.SchedulePhase),
 		RecentIPs:           make([]string, 0),
@@ -103,6 +105,9 @@ func (m *Manager) Load() error {
 	if cfg.DeviceRooms == nil {
 		cfg.DeviceRooms = make(map[string]string)
 	}
+	if cfg.DeviceGroups == nil {
+		cfg.DeviceGroups = make(map[string][]string)
+	}
 	if cfg.Presets == nil {
 		cfg.Presets = make(map[string]Preset)
 	}
@@ -146,6 +151,15 @@ func (m *Manager) GetConfig() Config {
 		roomsCopy[k] = v
 	}
 
+	groupsCopy := make(map[string][]string)
+	for k, members := range m.cfg.DeviceGroups {
+		if len(members) > 0 {
+			mCopy := make([]string, len(members))
+			copy(mCopy, members)
+			groupsCopy[k] = mCopy
+		}
+	}
+
 	presetsCopy := make(map[string]Preset)
 	for k, v := range m.cfg.Presets {
 		presetsCopy[k] = v
@@ -172,6 +186,7 @@ func (m *Manager) GetConfig() Config {
 	return Config{
 		DeviceAliases:       aliasesCopy,
 		DeviceRooms:         roomsCopy,
+		DeviceGroups:        groupsCopy,
 		Presets:             presetsCopy,
 		CircadianPhases:     phasesCopy,
 		RoomCircadianPhases: roomPhasesCopy,
@@ -389,6 +404,18 @@ func (m *Manager) ImportFromFile(srcPath string) error {
 			m.cfg.DeviceRooms[k] = v
 		}
 	}
+	if imported.DeviceGroups != nil {
+		if m.cfg.DeviceGroups == nil {
+			m.cfg.DeviceGroups = make(map[string][]string)
+		}
+		for group, members := range imported.DeviceGroups {
+			if len(members) > 0 {
+				mCopy := make([]string, len(members))
+				copy(mCopy, members)
+				m.cfg.DeviceGroups[strings.ToLower(strings.TrimSpace(group))] = mCopy
+			}
+		}
+	}
 	if imported.Presets != nil {
 		if m.cfg.Presets == nil {
 			m.cfg.Presets = make(map[string]Preset)
@@ -433,6 +460,84 @@ func (m *Manager) ImportFromFile(srcPath string) error {
 	m.mu.Unlock()
 
 	return m.Save()
+}
+
+// SetGroup assigns a list of device member identifiers to a custom group name and saves to disk.
+func (m *Manager) SetGroup(name string, members []string) error {
+	groupKey := strings.ToLower(strings.TrimSpace(name))
+	if groupKey == "" {
+		return fmt.Errorf("group name cannot be empty")
+	}
+	m.mu.Lock()
+	if m.cfg.DeviceGroups == nil {
+		m.cfg.DeviceGroups = make(map[string][]string)
+	}
+	if len(members) == 0 {
+		delete(m.cfg.DeviceGroups, groupKey)
+	} else {
+		unique := make([]string, 0, len(members))
+		seen := make(map[string]bool)
+		for _, mem := range members {
+			mem = strings.TrimSpace(mem)
+			if mem != "" && !seen[mem] {
+				seen[mem] = true
+				unique = append(unique, mem)
+			}
+		}
+		if len(unique) == 0 {
+			delete(m.cfg.DeviceGroups, groupKey)
+		} else {
+			m.cfg.DeviceGroups[groupKey] = unique
+		}
+	}
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// DeleteGroup removes a custom group by name and saves to disk.
+func (m *Manager) DeleteGroup(name string) error {
+	groupKey := strings.ToLower(strings.TrimSpace(name))
+	m.mu.Lock()
+	if m.cfg.DeviceGroups != nil {
+		delete(m.cfg.DeviceGroups, groupKey)
+	}
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// GetGroup retrieves member identifiers for a custom group, if present.
+func (m *Manager) GetGroup(name string) ([]string, bool) {
+	groupKey := strings.ToLower(strings.TrimSpace(name))
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cfg.DeviceGroups == nil {
+		return nil, false
+	}
+	members, found := m.cfg.DeviceGroups[groupKey]
+	if !found {
+		return nil, false
+	}
+	membersCopy := make([]string, len(members))
+	copy(membersCopy, members)
+	return membersCopy, true
+}
+
+// GetGroups returns a copy of all configured custom device groups.
+func (m *Manager) GetGroups() map[string][]string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cfg.DeviceGroups == nil {
+		return make(map[string][]string)
+	}
+	groupsCopy := make(map[string][]string)
+	for k, members := range m.cfg.DeviceGroups {
+		if len(members) > 0 {
+			mCopy := make([]string, len(members))
+			copy(mCopy, members)
+			groupsCopy[k] = mCopy
+		}
+	}
+	return groupsCopy
 }
 
 // SetCircadianPhases updates and persists custom 24-hour circadian schedule phases.

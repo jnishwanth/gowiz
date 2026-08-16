@@ -35,6 +35,7 @@ _gowiz_completions() {
     opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval --server -s --port --api-key --webhook"
     verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd serve server flash pulse strobe rainbow effect cat category categories info diag status config recent export import undo help scan quit completion"
     presets="evening movie night focus work relax party list save delete"
+    groups="list set create delete rm"
     effects="flash pulse strobe rainbow"
     categories="nature cozy white party mood dynamic"
     shells="bash zsh fish"
@@ -52,6 +53,11 @@ _gowiz_completions() {
 
     if [[ ${prev} == "preset" ]] ; then
         COMPREPLY=( $(compgen -W "${presets}" -- ${cur}) )
+        return 0
+    fi
+
+    if [[ ${prev} == "group" ]] ; then
+        COMPREPLY=( $(compgen -W "${groups}" -- ${cur}) )
         return 0
     fi
 
@@ -90,7 +96,7 @@ _gowiz() {
         'scene:Set dynamic scene'
         'preset:Manage or apply lighting presets'
         'room:Assign device to room'
-        'group:Execute batch command on room group'
+        'group:Manage device groups or execute batch command'
         'fade:Start linear dimming fade transition'
         'sunrise:Start sunrise lighting simulation'
         'sunset:Start sunset lighting simulation'
@@ -147,6 +153,9 @@ _gowiz() {
                 preset)
                     _values 'preset action' list save delete evening movie night focus work relax party
                     ;;
+                group)
+                    _values 'group action' list set create delete rm
+                    ;;
                 service)
                     _values 'service action' install uninstall status systemd launchd
                     ;;
@@ -190,7 +199,7 @@ complete -c gowiz -n "__fish_use_subcommand" -a daylight -d "Set daylight white 
 complete -c gowiz -n "__fish_use_subcommand" -a dim -d "Set brightness level"
 complete -c gowiz -n "__fish_use_subcommand" -a preset -d "Manage or apply lighting presets"
 complete -c gowiz -n "__fish_use_subcommand" -a room -d "Assign device to room"
-complete -c gowiz -n "__fish_use_subcommand" -a group -d "Execute batch command on room group"
+complete -c gowiz -n "__fish_use_subcommand" -a group -d "Manage device groups or execute batch command"
 complete -c gowiz -n "__fish_use_subcommand" -a fade -d "Start linear dimming fade transition"
 complete -c gowiz -n "__fish_use_subcommand" -a circadian -d "Apply 24-hour circadian lighting rhythm"
 complete -c gowiz -n "__fish_use_subcommand" -a daemon -d "Run background circadian schedule sync daemon"
@@ -206,6 +215,7 @@ complete -c gowiz -n "__fish_use_subcommand" -a completion -d "Generate shell au
 # Subcommands
 complete -c gowiz -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 complete -c gowiz -n "__fish_seen_subcommand_from preset" -a "list save delete evening movie night focus work relax party"
+complete -c gowiz -n "__fish_seen_subcommand_from group" -a "list set create delete rm"
 complete -c gowiz -n "__fish_seen_subcommand_from service" -a "install uninstall status systemd launchd"
 `
 }

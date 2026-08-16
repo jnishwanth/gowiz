@@ -545,11 +545,57 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
-	// Handle batch pilot command to room
+	// Handle custom device group creation/updating
+	if result.SetGroupName != "" && len(result.SetGroupMembers) > 0 {
+		_ = cfgMgr.SetGroup(result.SetGroupName, result.SetGroupMembers)
+		if opts.JSONOutput {
+			return printJSON(w, map[string]any{
+				"status":  "ok",
+				"action":  "set_group",
+				"group":   result.SetGroupName,
+				"members": result.SetGroupMembers,
+			})
+		}
+		fmt.Fprintf(w, "Created group '%s' with %d member(s)\n", result.SetGroupName, len(result.SetGroupMembers))
+		return nil
+	}
+
+	// Handle custom device group deletion
+	if result.DeleteGroupName != "" {
+		_ = cfgMgr.DeleteGroup(result.DeleteGroupName)
+		if opts.JSONOutput {
+			return printJSON(w, map[string]string{
+				"status": "ok",
+				"action": "delete_group",
+				"group":  result.DeleteGroupName,
+			})
+		}
+		fmt.Fprintf(w, "Deleted group '%s'\n", result.DeleteGroupName)
+		return nil
+	}
+
+	// Handle custom device group listing
+	if result.ListGroups {
+		groups := cfgMgr.GetGroups()
+		if opts.JSONOutput {
+			return printJSON(w, groups)
+		}
+		if len(groups) == 0 {
+			fmt.Fprintln(w, "No custom device groups configured.")
+		} else {
+			fmt.Fprintln(w, "Custom Device Groups:")
+			for g, mems := range groups {
+				fmt.Fprintf(w, "  - %s: %s\n", g, strings.Join(mems, ", "))
+			}
+		}
+		return nil
+	}
+
+	// Handle batch pilot command to room or custom group
 	if result.TargetRoom != "" && result.PilotParams != nil {
-		targets := reg.GetDevicesByRoom(result.TargetRoom)
+		targets := reg.GetDevicesByGroupOrRoom(result.TargetRoom, cfgMgr.GetGroups())
 		if len(targets) == 0 {
-			return fmt.Errorf("no devices found in room '%s'", result.TargetRoom)
+			return fmt.Errorf("no devices found in group/room '%s'", result.TargetRoom)
 		}
 		ips := make([]string, len(targets))
 		for i, dev := range targets {
@@ -569,21 +615,21 @@ func Run(ctx context.Context, opts Options) error {
 			if opts.JSONOutput {
 				return printJSON(w, map[string]any{
 					"status":       "error",
-					"room":         result.TargetRoom,
+					"target":       result.TargetRoom,
 					"device_count": len(ips),
 					"failed_count": failedCount,
 				})
 			}
-			return fmt.Errorf("batch room command failed for %d device(s)", failedCount)
+			return fmt.Errorf("batch group command failed for %d device(s)", failedCount)
 		}
 		if opts.JSONOutput {
 			return printJSON(w, map[string]any{
 				"status":       "ok",
-				"room":         result.TargetRoom,
+				"target":       result.TargetRoom,
 				"device_count": len(ips),
 			})
 		}
-		fmt.Fprintf(w, "Successfully sent command to room '%s' (%d device(s))\n", result.TargetRoom, len(ips))
+		fmt.Fprintf(w, "Successfully sent command to group/room '%s' (%d device(s))\n", result.TargetRoom, len(ips))
 		return nil
 	}
 

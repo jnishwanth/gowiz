@@ -456,4 +456,21 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected effect sub-command flash config, got %+v", resEffect.EffectConfig)
 		}
 	})
+
+	t.Run("Custom group management commands", func(t *testing.T) {
+		resSet := ExecuteCommand("group set desk 192.168.1.50 192.168.1.51", dev)
+		if resSet.SetGroupName != "desk" || len(resSet.SetGroupMembers) != 2 {
+			t.Errorf("expected group set 'desk' with 2 members, got %+v", resSet)
+		}
+
+		resDel := ExecuteCommand("group delete desk", dev)
+		if resDel.DeleteGroupName != "desk" {
+			t.Errorf("expected group delete 'desk', got %+v", resDel)
+		}
+
+		resList := ExecuteCommand("group list", dev)
+		if !resList.ListGroups {
+			t.Errorf("expected ListGroups true for :group list")
+		}
+	})
 }
