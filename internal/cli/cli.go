@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"wiz-tui/internal/completion"
 	"wiz-tui/internal/config"
 	"wiz-tui/internal/tui"
 	"wiz-tui/internal/wiz"
@@ -179,6 +180,28 @@ func Run(ctx context.Context, opts Options) error {
 			})
 		}
 		fmt.Fprintf(w, "Configuration imported successfully from %s\n", result.ImportPath)
+		return nil
+	}
+
+	// Handle completion script generation
+	if result.CompletionShell != "" {
+		script, err := completion.Generate(result.CompletionShell)
+		if err != nil {
+			return err
+		}
+		if opts.JSONOutput {
+			type CompletionJSON struct {
+				Status string `json:"status"`
+				Shell  string `json:"shell"`
+				Script string `json:"script"`
+			}
+			return printJSON(w, CompletionJSON{
+				Status: "ok",
+				Shell:  result.CompletionShell,
+				Script: script,
+			})
+		}
+		fmt.Fprint(w, script)
 		return nil
 	}
 
@@ -472,4 +495,3 @@ func Run(ctx context.Context, opts Options) error {
 
 	return nil
 }
-

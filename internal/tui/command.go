@@ -40,6 +40,7 @@ type CommandActionResult struct {
 	ShowInfo         bool   // request active device diagnostic info display
 	ExportPath       string // destination path for exporting config
 	ImportPath       string // source path for importing config
+	CompletionShell string // target shell for generating autocompletion script
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -765,4 +766,21 @@ func (r *CommandRegistry) registerDefaults() {
 			return CommandActionResult{StatusMsg: fmt.Sprintf("Scene not found: %s", scName)}
 		})
 	}
+
+	// Shell completion verb
+	r.Register("completion", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		sh := "bash"
+		if len(args) > 0 {
+			sh = strings.ToLower(strings.TrimSpace(args[0]))
+		}
+		if sh != "bash" && sh != "zsh" && sh != "fish" {
+			return CommandActionResult{
+				StatusMsg: fmt.Sprintf("Unsupported shell '%s', expected 'bash', 'zsh', or 'fish'", sh),
+			}
+		}
+		return CommandActionResult{
+			CompletionShell: sh,
+			StatusMsg:       fmt.Sprintf("Generated %s completion script", sh),
+		}
+	})
 }

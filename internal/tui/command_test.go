@@ -313,4 +313,29 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected usage message for empty :import args, got '%s'", resImportEmpty.StatusMsg)
 		}
 	})
+
+	t.Run("Shell completion command dispatches", func(t *testing.T) {
+		resDefault := ExecuteCommand("completion", dev)
+		if resDefault.CompletionShell != "bash" {
+			t.Errorf("expected default shell 'bash', got %q", resDefault.CompletionShell)
+		}
+
+		resZsh := ExecuteCommand("completion zsh", dev)
+		if resZsh.CompletionShell != "zsh" {
+			t.Errorf("expected shell 'zsh', got %q", resZsh.CompletionShell)
+		}
+
+		resFish := ExecuteCommand("completion fish", dev)
+		if resFish.CompletionShell != "fish" {
+			t.Errorf("expected shell 'fish', got %q", resFish.CompletionShell)
+		}
+
+		resInvalid := ExecuteCommand("completion powershell", dev)
+		if resInvalid.CompletionShell != "" {
+			t.Errorf("expected empty CompletionShell on invalid shell input")
+		}
+		if resInvalid.StatusMsg == "" {
+			t.Errorf("expected status message error on invalid shell input")
+		}
+	})
 }

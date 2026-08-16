@@ -362,7 +362,36 @@ func TestCLIRun(t *testing.T) {
 		if !strings.Contains(buf.String(), `"action": "import"`) {
 			t.Errorf("expected JSON import output, got: %s", buf.String())
 		}
+
+		// Completion JSON
+		buf.Reset()
+		opts.Command = "completion zsh"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"shell": "zsh"`) || !strings.Contains(buf.String(), "#compdef gowiz") {
+			t.Errorf("expected JSON completion output, got: %s", buf.String())
+		}
+	})
+
+	t.Run("Shell completion script generation plain text", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Command:    "completion fish",
+			Writer:     &buf,
+		}
+
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "complete -c gowiz") {
+			t.Errorf("expected fish completion script output, got: %s", buf.String())
+		}
 	})
 }
-
-
