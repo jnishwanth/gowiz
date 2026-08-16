@@ -276,4 +276,42 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected custom handler response, got %q", res.StatusMsg)
 		}
 	})
+
+	t.Run("Info, Diag, Export, and Import command dispatches", func(t *testing.T) {
+		resInfo := ExecuteCommand("info", dev)
+		if !resInfo.ShowInfo {
+			t.Errorf("expected ShowInfo true for :info command")
+		}
+
+		resDiag := ExecuteCommand("diag", dev)
+		if !resDiag.ShowInfo {
+			t.Errorf("expected ShowInfo true for :diag command")
+		}
+
+		resStatus := ExecuteCommand("status", dev)
+		if !resStatus.ShowInfo {
+			t.Errorf("expected ShowInfo true for :status command")
+		}
+
+		resExport := ExecuteCommand("export my_backup.json", dev)
+		if resExport.ExportPath != "my_backup.json" {
+			t.Errorf("expected ExportPath 'my_backup.json', got '%s'", resExport.ExportPath)
+		}
+
+		resExportDef := ExecuteCommand("export", dev)
+		if resExportDef.ExportPath != "gowiz-config-backup.json" {
+			t.Errorf("expected default ExportPath 'gowiz-config-backup.json', got '%s'", resExportDef.ExportPath)
+		}
+
+		resImport := ExecuteCommand("import my_backup.json", dev)
+		if resImport.ImportPath != "my_backup.json" {
+			t.Errorf("expected ImportPath 'my_backup.json', got '%s'", resImport.ImportPath)
+		}
+
+		resImportEmpty := ExecuteCommand("import", dev)
+		if resImportEmpty.StatusMsg != "Usage: :import <filepath>" {
+			t.Errorf("expected usage message for empty :import args, got '%s'", resImportEmpty.StatusMsg)
+		}
+	})
 }
+

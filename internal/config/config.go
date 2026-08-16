@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,3 +307,90 @@ func (m *Manager) GetPresets() map[string]Preset {
 	}
 	return presetsCopy
 }
+
+// ExportToFile writes a copy of the current configuration to the specified destination path.
+func (m *Manager) ExportToFile(destPath string) error {
+	destPath = strings.TrimSpace(destPath)
+	if destPath == "" {
+		return fmt.Errorf("export file path cannot be empty")
+	}
+
+	m.mu.RLock()
+	data, err := json.MarshalIndent(m.cfg, "", "  ")
+	m.mu.RUnlock()
+	if err != nil {
+		return fmt.Errorf("failed to marshal export config: %w", err)
+	}
+
+	dir := filepath.Dir(destPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create export directory: %w", err)
+	}
+
+	return os.WriteFile(destPath, data, 0644)
+}
+
+// ImportFromFile reads and merges configuration from the specified file path into current settings.
+func (m *Manager) ImportFromFile(srcPath string) error {
+	srcPath = strings.TrimSpace(srcPath)
+	if srcPath == "" {
+		return fmt.Errorf("import file path cannot be empty")
+	}
+
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to read import file: %w", err)
+	}
+
+	var imported Config
+	if err := json.Unmarshal(data, &imported); err != nil {
+		return fmt.Errorf("invalid config JSON format: %w", err)
+	}
+
+	m.mu.Lock()
+	if imported.DeviceAliases != nil {
+		if m.cfg.DeviceAliases == nil {
+			m.cfg.DeviceAliases = make(map[string]string)
+		}
+		for k, v := range imported.DeviceAliases {
+			m.cfg.DeviceAliases[k] = v
+		}
+	}
+	if imported.DeviceRooms != nil {
+		if m.cfg.DeviceRooms == nil {
+			m.cfg.DeviceRooms = make(map[string]string)
+		}
+		for k, v := range imported.DeviceRooms {
+			m.cfg.DeviceRooms[k] = v
+		}
+	}
+	if imported.Presets != nil {
+		if m.cfg.Presets == nil {
+			m.cfg.Presets = make(map[string]Preset)
+		}
+		for k, v := range imported.Presets {
+			m.cfg.Presets[k] = v
+		}
+	}
+	for _, ip := range imported.RecentIPs {
+		if ip != "" {
+			found := false
+			for _, existing := range m.cfg.RecentIPs {
+				if existing == ip {
+					found = true
+					break
+				}
+			}
+			if !found {
+				m.cfg.RecentIPs = append(m.cfg.RecentIPs, ip)
+			}
+		}
+	}
+	if len(m.cfg.RecentIPs) > 10 {
+		m.cfg.RecentIPs = m.cfg.RecentIPs[:10]
+	}
+	m.mu.Unlock()
+
+	return m.Save()
+}
+

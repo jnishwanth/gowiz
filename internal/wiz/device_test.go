@@ -134,4 +134,37 @@ func TestDeviceRegistry(t *testing.T) {
 			t.Errorf("expected device room 'Living Room', got '%s'", dev.Room)
 		}
 	})
+
+	t.Run("SignalPercentage, SignalQuality, and SignalBar", func(t *testing.T) {
+		dev := NewDevice("192.168.1.30")
+		if dev.SignalPercentage() != 0 || dev.SignalQuality() != "Unknown" || dev.SignalBar() != "📶 Online" {
+			t.Errorf("expected zero RSSI defaults, got %d, %s, %s", dev.SignalPercentage(), dev.SignalQuality(), dev.SignalBar())
+		}
+
+		dev.Rssi = -40
+		if dev.SignalPercentage() != 83 || dev.SignalQuality() != "Excellent" {
+			t.Errorf("expected -40 dBm to be 83%% Excellent, got %d%% %s", dev.SignalPercentage(), dev.SignalQuality())
+		}
+
+		dev.Rssi = -50
+		if dev.SignalQuality() != "Good" {
+			t.Errorf("expected -50 dBm to be Good quality, got %s", dev.SignalQuality())
+		}
+
+		dev.Rssi = -65
+		if dev.SignalQuality() != "Fair" {
+			t.Errorf("expected -65 dBm to be Fair quality, got %s", dev.SignalQuality())
+		}
+
+		dev.Rssi = -100
+		if dev.SignalPercentage() != 0 || dev.SignalQuality() != "Weak" {
+			t.Errorf("expected -100 dBm clamped to 0%% Weak, got %d%% %s", dev.SignalPercentage(), dev.SignalQuality())
+		}
+
+		dev.Rssi = -20
+		if dev.SignalPercentage() != 100 || dev.SignalQuality() != "Excellent" {
+			t.Errorf("expected -20 dBm clamped to 100%% Excellent, got %d%% %s", dev.SignalPercentage(), dev.SignalQuality())
+		}
+	})
 }
+

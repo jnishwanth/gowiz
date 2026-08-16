@@ -37,6 +37,9 @@ type CommandActionResult struct {
 	FadeTurnOff      bool   // whether to turn off light upon fade completion
 	FadeLabel        string // user-facing label for active fade badge
 	IsFadeCommand    bool   // flag indicating a fade transition request
+	ShowInfo         bool   // request active device diagnostic info display
+	ExportPath       string // destination path for exporting config
+	ImportPath       string // source path for importing config
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -526,6 +529,46 @@ func (r *CommandRegistry) registerDefaults() {
 			StatusMsg:  "Querying configuration location and saved aliases...",
 		}
 	})
+
+	// Device Diagnostic & Telemetry Info Verbs
+	infoHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{
+			ShowInfo:  true,
+			StatusMsg: "Querying active bulb diagnostics...",
+		}
+	}
+	r.Register("info", infoHandler)
+	r.Register("diag", infoHandler)
+	r.Register("status", infoHandler)
+
+	// Config Export / Backup Verbs
+	exportHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		dest := "gowiz-config-backup.json"
+		if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
+			dest = strings.TrimSpace(args[0])
+		}
+		return CommandActionResult{
+			ExportPath: dest,
+			StatusMsg:  fmt.Sprintf("Exporting configuration to %s...", dest),
+		}
+	}
+	r.Register("export", exportHandler)
+	r.Register("backup", exportHandler)
+
+	// Config Import / Restore Verbs
+	importHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 || strings.TrimSpace(args[0]) == "" {
+			return CommandActionResult{StatusMsg: "Usage: :import <filepath>"}
+		}
+		src := strings.TrimSpace(args[0])
+		return CommandActionResult{
+			ImportPath: src,
+			StatusMsg:  fmt.Sprintf("Importing configuration from %s...", src),
+		}
+	}
+	r.Register("import", importHandler)
+	r.Register("restore", importHandler)
+
 
 	// IP Target / Connect Verbs
 	ipHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {

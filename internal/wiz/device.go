@@ -77,6 +77,49 @@ func (d *Device) UpdateFromPilot(p PilotParams) {
 	}
 }
 
+// SignalPercentage maps device RSSI (ranging -90 dBm to -30 dBm) to a 0..100 percentage.
+func (d *Device) SignalPercentage() int {
+	if d.Rssi == 0 {
+		return 0
+	}
+	if d.Rssi >= -30 {
+		return 100
+	}
+	if d.Rssi <= -90 {
+		return 0
+	}
+	return int(float64(d.Rssi+90) / 60.0 * 100.0)
+}
+
+// SignalQuality converts RSSI percentage to a human-readable quality rating string.
+func (d *Device) SignalQuality() string {
+	if d.Rssi == 0 {
+		return "Unknown"
+	}
+	pct := d.SignalPercentage()
+	switch {
+	case pct >= 80:
+		return "Excellent"
+	case pct >= 60:
+		return "Good"
+	case pct >= 40:
+		return "Fair"
+	case pct >= 20:
+		return "Poor"
+	default:
+		return "Weak"
+	}
+}
+
+// SignalBar formats RSSI telemetry as a compact Wi-Fi status string.
+func (d *Device) SignalBar() string {
+	if d.Rssi == 0 {
+		return "📶 Online"
+	}
+	return fmt.Sprintf("📶 %d%% (%d dBm)", d.SignalPercentage(), d.Rssi)
+}
+
+
 // DeviceRegistry provides a thread-safe store for discovered devices
 type DeviceRegistry struct {
 	mu           sync.RWMutex
@@ -161,6 +204,9 @@ func (r *DeviceRegistry) AddOrUpdate(dev *Device) {
 		existing.Online = true
 		if dev.MAC != "" {
 			existing.MAC = dev.MAC
+		}
+		if dev.Rssi != 0 {
+			existing.Rssi = dev.Rssi
 		}
 		if alias, ok := r.aliases[dev.IP]; ok && alias != "" {
 			existing.Name = alias

@@ -256,3 +256,58 @@ func TestConfigManagerPresets(t *testing.T) {
 		t.Errorf("Expected deleted preset to no longer exist")
 	}
 }
+
+func TestConfigManagerExportAndImport(t *testing.T) {
+	tempDir := t.TempDir()
+	srcPath := filepath.Join(tempDir, "source_config.json")
+	exportPath := filepath.Join(tempDir, "exports", "backup.json")
+	targetPath := filepath.Join(tempDir, "target_config.json")
+
+	mgr := config.NewManager(srcPath)
+	_ = mgr.SetAlias("192.168.1.100", "Office Desk")
+	_ = mgr.SetRoom("192.168.1.100", "Office")
+	_ = mgr.AddRecentIP("192.168.1.100")
+	dim := 80
+	_ = mgr.SetPreset("focus_mode", config.Preset{Dimming: &dim})
+
+	// Export to file
+	err := mgr.ExportToFile(exportPath)
+	if err != nil {
+		t.Fatalf("Failed to export config to file: %v", err)
+	}
+
+	if _, err := os.Stat(exportPath); os.IsNotExist(err) {
+		t.Fatalf("Expected export file to exist at %s", exportPath)
+	}
+
+	// Import into new Manager instance
+	mgrTarget := config.NewManager(targetPath)
+	err = mgrTarget.ImportFromFile(exportPath)
+	if err != nil {
+		t.Fatalf("Failed to import config from file: %v", err)
+	}
+
+	alias, foundAlias := mgrTarget.GetAlias("192.168.1.100")
+	if !foundAlias || alias != "Office Desk" {
+		t.Errorf("Expected imported alias 'Office Desk', got '%s' (found: %v)", alias, foundAlias)
+	}
+
+	room, foundRoom := mgrTarget.GetRoom("192.168.1.100")
+	if !foundRoom || room != "Office" {
+		t.Errorf("Expected imported room 'Office', got '%s' (found: %v)", room, foundRoom)
+	}
+
+	preset, foundPreset := mgrTarget.GetPreset("focus_mode")
+	if !foundPreset || preset.Dimming == nil || *preset.Dimming != 80 {
+		t.Errorf("Expected imported preset 'focus_mode', got %+v", preset)
+	}
+
+	// Verify empty path validation
+	if err := mgr.ExportToFile(""); err == nil {
+		t.Errorf("Expected error exporting to empty path")
+	}
+	if err := mgr.ImportFromFile(""); err == nil {
+		t.Errorf("Expected error importing from empty path")
+	}
+}
+

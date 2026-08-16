@@ -33,10 +33,7 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, fad
 		}
 
 		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(displayName)
-		rssiStr := "📶 Online"
-		if dev.Rssi != 0 {
-			rssiStr = fmt.Sprintf("📶 %d dBm", dev.Rssi)
-		}
+		rssiStr := dev.SignalBar()
 		rssiPill := lipgloss.NewStyle().Foreground(styles.Subtext0).Render(rssiStr)
 		roomStr := ""
 		if dev.Room != "" {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1085,3 +1086,64 @@ func TestCategoryCommandInModel(t *testing.T) {
 		t.Errorf("expected category status message, got %q", m.statusMessage)
 	}
 }
+
+func TestInfoAndExportImportInModel(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "config.json")
+	exportPath := filepath.Join(tempDir, "backup.json")
+
+	mock := wiz.NewMockClient()
+	m := NewModelWithConfig(mock, "192.168.1.50", cfgPath)
+
+	dev := wiz.NewDevice("192.168.1.50")
+	dev.MAC = "a8:bb:cc:dd:ee:ff"
+	dev.Rssi = -55
+	m.Registry.AddOrUpdate(dev)
+	m.setActiveDevice("192.168.1.50")
+
+	// Dispatch :info command
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	m = updated.(Model)
+	for _, r := range "info" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if !strings.Contains(m.statusMessage, "192.168.1.50") || !strings.Contains(m.statusMessage, "-55 dBm") {
+		t.Errorf("expected diagnostic info in status message, got %q", m.statusMessage)
+	}
+
+	// Dispatch :export command
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	m = updated.(Model)
+	for _, r := range "export " + exportPath {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if !strings.Contains(m.statusMessage, "exported") {
+		t.Errorf("expected export confirmation status message, got %q", m.statusMessage)
+	}
+	if _, err := os.Stat(exportPath); os.IsNotExist(err) {
+		t.Fatalf("expected exported file to exist at %s", exportPath)
+	}
+
+	// Dispatch :import command
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	m = updated.(Model)
+	for _, r := range "import " + exportPath {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if !strings.Contains(m.statusMessage, "imported") {
+		t.Errorf("expected import confirmation status message, got %q", m.statusMessage)
+	}
+}
+

@@ -672,6 +672,71 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if res.ShowInfo {
+			if activeDev != nil {
+				macStr := activeDev.MAC
+				if macStr == "" {
+					macStr = "N/A"
+				}
+				roomStr := activeDev.Room
+				if roomStr == "" {
+					roomStr = "Unassigned"
+				}
+				stateStr := "OFF"
+				if activeDev.State {
+					stateStr = "ON"
+				}
+				modeStr := fmt.Sprintf("Brightness: %d%%", activeDev.Brightness)
+				if activeDev.SceneID > 0 {
+					sc := wiz.GetSceneByID(activeDev.SceneID)
+					modeStr += fmt.Sprintf(" | Scene: %s (#%d)", sc.Name, activeDev.SceneID)
+				} else if activeDev.Temp > 0 {
+					modeStr += fmt.Sprintf(" | Temp: %dK", activeDev.Temp)
+				} else {
+					modeStr += fmt.Sprintf(" | RGB: #%02x%02x%02x", activeDev.RGB[0], activeDev.RGB[1], activeDev.RGB[2])
+				}
+				m.setStatusMessage(fmt.Sprintf("💡 %s (%s) │ MAC: %s │ Room: %s │ State: %s │ %s │ %s", activeDev.Name, activeDev.IP, macStr, roomStr, stateStr, activeDev.SignalBar(), modeStr))
+			} else {
+				m.setStatusMessage("No active WiZ light selected.")
+			}
+			return m, nil
+		}
+
+		if res.ExportPath != "" {
+			if m.configManager != nil {
+				if err := m.configManager.ExportToFile(res.ExportPath); err != nil {
+					m.setStatusMessage(fmt.Sprintf("⚠️ Export failed: %v", err))
+				} else {
+					m.setStatusMessage(fmt.Sprintf("✓ Configuration exported to %s", res.ExportPath))
+				}
+			} else {
+				m.setStatusMessage("No config manager attached.")
+			}
+			return m, nil
+		}
+
+		if res.ImportPath != "" {
+			if m.configManager != nil {
+				if err := m.configManager.ImportFromFile(res.ImportPath); err != nil {
+					m.setStatusMessage(fmt.Sprintf("⚠️ Import failed: %v", err))
+				} else {
+					cfg := m.configManager.GetConfig()
+					m.Registry.ApplyAliases(cfg.DeviceAliases)
+					m.Registry.ApplyRooms(cfg.DeviceRooms)
+					for _, recIP := range cfg.RecentIPs {
+						if recIP != "" && recIP != wiz.FallbackIP {
+							m.Registry.AddOrUpdate(wiz.NewDevice(recIP))
+						}
+					}
+					m.setStatusMessage(fmt.Sprintf("✓ Configuration imported from %s", res.ImportPath))
+				}
+			} else {
+				m.setStatusMessage("No config manager attached.")
+			}
+			return m, nil
+		}
+
+
 		if res.ShowRecent {
 			if m.configManager != nil {
 				recents := m.configManager.GetRecentIPs()
