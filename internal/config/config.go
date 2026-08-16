@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"wiz-tui/internal/circadian"
 )
 
 // Preset stores a reusable lighting configuration snapshot (dimming, color temp, RGB, or scene).
@@ -22,12 +24,13 @@ type Preset struct {
 
 // Config represents persistent user settings and custom bulb aliases.
 type Config struct {
-	DeviceAliases map[string]string `json:"device_aliases"`
-	DeviceRooms   map[string]string `json:"device_rooms,omitempty"`
-	Presets       map[string]Preset `json:"presets,omitempty"`
-	LastActiveIP  string            `json:"last_active_ip,omitempty"`
-	RecentIPs     []string          `json:"recent_ips,omitempty"`
-	AutoScan      bool              `json:"auto_scan"`
+	DeviceAliases   map[string]string         `json:"device_aliases"`
+	DeviceRooms     map[string]string         `json:"device_rooms,omitempty"`
+	Presets         map[string]Preset         `json:"presets,omitempty"`
+	CircadianPhases []circadian.SchedulePhase `json:"circadian_phases,omitempty"`
+	LastActiveIP    string                    `json:"last_active_ip,omitempty"`
+	RecentIPs       []string                  `json:"recent_ips,omitempty"`
+	AutoScan        bool                      `json:"auto_scan"`
 }
 
 // Manager manages concurrent-safe loading, saving, and querying of the gowiz config file.
@@ -146,13 +149,20 @@ func (m *Manager) GetConfig() Config {
 	recentCopy := make([]string, len(m.cfg.RecentIPs))
 	copy(recentCopy, m.cfg.RecentIPs)
 
+	var phasesCopy []circadian.SchedulePhase
+	if len(m.cfg.CircadianPhases) > 0 {
+		phasesCopy = make([]circadian.SchedulePhase, len(m.cfg.CircadianPhases))
+		copy(phasesCopy, m.cfg.CircadianPhases)
+	}
+
 	return Config{
-		DeviceAliases: aliasesCopy,
-		DeviceRooms:   roomsCopy,
-		Presets:       presetsCopy,
-		LastActiveIP:  m.cfg.LastActiveIP,
-		RecentIPs:     recentCopy,
-		AutoScan:      m.cfg.AutoScan,
+		DeviceAliases:   aliasesCopy,
+		DeviceRooms:     roomsCopy,
+		Presets:         presetsCopy,
+		CircadianPhases: phasesCopy,
+		LastActiveIP:    m.cfg.LastActiveIP,
+		RecentIPs:       recentCopy,
+		AutoScan:        m.cfg.AutoScan,
 	}
 }
 
@@ -372,6 +382,10 @@ func (m *Manager) ImportFromFile(srcPath string) error {
 			m.cfg.Presets[k] = v
 		}
 	}
+	if len(imported.CircadianPhases) > 0 {
+		m.cfg.CircadianPhases = make([]circadian.SchedulePhase, len(imported.CircadianPhases))
+		copy(m.cfg.CircadianPhases, imported.CircadianPhases)
+	}
 	for _, ip := range imported.RecentIPs {
 		if ip != "" {
 			found := false
@@ -392,4 +406,34 @@ func (m *Manager) ImportFromFile(srcPath string) error {
 	m.mu.Unlock()
 
 	return m.Save()
+}
+
+// SetCircadianPhases updates and persists custom 24-hour circadian schedule phases.
+func (m *Manager) SetCircadianPhases(phases []circadian.SchedulePhase) error {
+	if len(phases) > 0 {
+		if err := circadian.ValidatePhases(phases); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	if len(phases) == 0 {
+		m.cfg.CircadianPhases = nil
+	} else {
+		m.cfg.CircadianPhases = make([]circadian.SchedulePhase, len(phases))
+		copy(m.cfg.CircadianPhases, phases)
+	}
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// GetCircadianPhases retrieves a copy of custom circadian schedule phases, if set.
+func (m *Manager) GetCircadianPhases() []circadian.SchedulePhase {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.cfg.CircadianPhases) == 0 {
+		return nil
+	}
+	phasesCopy := make([]circadian.SchedulePhase, len(m.cfg.CircadianPhases))
+	copy(phasesCopy, m.cfg.CircadianPhases)
+	return phasesCopy
 }

@@ -132,3 +132,98 @@ func TestParseTimeArg(t *testing.T) {
 		}
 	})
 }
+
+func TestValidatePhases(t *testing.T) {
+	t.Run("Empty phases list", func(t *testing.T) {
+		if err := circadian.ValidatePhases(nil); err == nil {
+			t.Errorf("expected error for empty phases list, got nil")
+		}
+	})
+
+	t.Run("Empty phase name", func(t *testing.T) {
+		phases := []circadian.SchedulePhase{
+			{Name: "", StartHour: 0, EndHour: 12, StartTemp: 2700, EndTemp: 5000, StartDimming: 50, EndDimming: 100},
+		}
+		if err := circadian.ValidatePhases(phases); err == nil {
+			t.Errorf("expected error for empty phase name, got nil")
+		}
+	})
+
+	t.Run("Invalid start hour", func(t *testing.T) {
+		phases := []circadian.SchedulePhase{
+			{Name: "Bad Start", StartHour: -1, EndHour: 12, StartTemp: 2700, EndTemp: 5000, StartDimming: 50, EndDimming: 100},
+		}
+		if err := circadian.ValidatePhases(phases); err == nil {
+			t.Errorf("expected error for negative start hour, got nil")
+		}
+	})
+
+	t.Run("Invalid end hour", func(t *testing.T) {
+		phases := []circadian.SchedulePhase{
+			{Name: "Bad End", StartHour: 10, EndHour: 8, StartTemp: 2700, EndTemp: 5000, StartDimming: 50, EndDimming: 100},
+		}
+		if err := circadian.ValidatePhases(phases); err == nil {
+			t.Errorf("expected error when end hour <= start hour, got nil")
+		}
+	})
+
+	t.Run("Invalid color temperature", func(t *testing.T) {
+		phases := []circadian.SchedulePhase{
+			{Name: "Bad Temp", StartHour: 0, EndHour: 12, StartTemp: 1500, EndTemp: 5000, StartDimming: 50, EndDimming: 100},
+		}
+		if err := circadian.ValidatePhases(phases); err == nil {
+			t.Errorf("expected error for out-of-range color temp, got nil")
+		}
+	})
+
+	t.Run("Invalid dimming percentage", func(t *testing.T) {
+		phases := []circadian.SchedulePhase{
+			{Name: "Bad Dimming", StartHour: 0, EndHour: 12, StartTemp: 2700, EndTemp: 5000, StartDimming: 5, EndDimming: 100},
+		}
+		if err := circadian.ValidatePhases(phases); err == nil {
+			t.Errorf("expected error for out-of-range dimming, got nil")
+		}
+	})
+
+	t.Run("Valid phases slice", func(t *testing.T) {
+		phases := []circadian.SchedulePhase{
+			{Name: "Custom Morning", StartHour: 5, EndHour: 12, StartTemp: 2200, EndTemp: 6000, StartDimming: 20, EndDimming: 100},
+			{Name: "Custom Evening", StartHour: 12, EndHour: 24, StartTemp: 6000, EndTemp: 2200, StartDimming: 100, EndDimming: 20},
+		}
+		if err := circadian.ValidatePhases(phases); err != nil {
+			t.Errorf("unexpected error for valid phases: %v", err)
+		}
+	})
+}
+
+func TestCalculateWithPhases(t *testing.T) {
+	customPhases := []circadian.SchedulePhase{
+		{Name: "Night Owl Rest", StartHour: 0, EndHour: 8, StartTemp: 2200, EndTemp: 2200, StartDimming: 20, EndDimming: 20},
+		{Name: "Shift Work Boost", StartHour: 8, EndHour: 16, StartTemp: 3000, EndTemp: 6500, StartDimming: 50, EndDimming: 100},
+		{Name: "Wind Down", StartHour: 16, EndHour: 24, StartTemp: 6500, EndTemp: 2200, StartDimming: 100, EndDimming: 20},
+	}
+
+	t.Run("Fallback to default on nil phases", func(t *testing.T) {
+		tm := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+		info := circadian.CalculateWithPhases(tm, nil)
+		if info.Phase != "Day Daylight" {
+			t.Errorf("expected fallback to default phase 'Day Daylight', got %q", info.Phase)
+		}
+	})
+
+	t.Run("Custom phase calculation", func(t *testing.T) {
+		tm := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+		info := circadian.CalculateWithPhases(tm, customPhases)
+		if info.Phase != "Shift Work Boost" {
+			t.Errorf("expected custom phase 'Shift Work Boost', got %q", info.Phase)
+		}
+		// At hour 12 (midpoint of 8..16), temp should be (3000+6500)/2 = 4750
+		if info.Temp != 4750 {
+			t.Errorf("expected temp 4750, got %d", info.Temp)
+		}
+		// Dimming at midpoint (50+100)/2 = 75
+		if info.Dimming != 75 {
+			t.Errorf("expected dimming 75, got %d", info.Dimming)
+		}
+	})
+}

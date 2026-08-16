@@ -89,7 +89,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("no command specified")
 	}
 
-	result := tui.ExecuteCommand(cmdStr, activeDev)
+	result := tui.ExecuteCommandWithPhases(cmdStr, activeDev, cfg.CircadianPhases)
 
 	// Resolve preset params if custom or builtin preset requested
 	if result.ApplyPresetName != "" && result.PilotParams == nil {

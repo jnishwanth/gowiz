@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/config"
 	"wiz-tui/internal/tui/styles"
 	"wiz-tui/internal/tui/views"
@@ -607,7 +608,11 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 		}
 
 		activeDev, _ := m.Registry.GetActive()
-		res := ExecuteCommand(cmdStr, activeDev)
+		var customPhases []circadian.SchedulePhase
+		if m.configManager != nil {
+			customPhases = m.configManager.GetCircadianPhases()
+		}
+		res := ExecuteCommandWithPhases(cmdStr, activeDev, customPhases)
 
 		if res.Quit {
 			return m, tea.Quit

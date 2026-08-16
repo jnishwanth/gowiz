@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/config"
 )
 
@@ -308,5 +309,60 @@ func TestConfigManagerExportAndImport(t *testing.T) {
 	}
 	if err := mgr.ImportFromFile(""); err == nil {
 		t.Errorf("Expected error importing from empty path")
+	}
+}
+
+func TestConfigManagerCircadianPhases(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "circadian_config.json")
+
+	mgr := config.NewManager(cfgPath)
+	if phases := mgr.GetCircadianPhases(); phases != nil {
+		t.Errorf("expected initial CircadianPhases to be nil, got %v", phases)
+	}
+
+	customPhases := []circadian.SchedulePhase{
+		{Name: "Custom Morning", StartHour: 6, EndHour: 12, StartTemp: 2700, EndTemp: 6000, StartDimming: 40, EndDimming: 100},
+		{Name: "Custom Night", StartHour: 12, EndHour: 24, StartTemp: 6000, EndTemp: 2200, StartDimming: 100, EndDimming: 20},
+	}
+
+	err := mgr.SetCircadianPhases(customPhases)
+	if err != nil {
+		t.Fatalf("unexpected error setting circadian phases: %v", err)
+	}
+
+	retrieved := mgr.GetCircadianPhases()
+	if len(retrieved) != 2 {
+		t.Fatalf("expected 2 retrieved phases, got %d", len(retrieved))
+	}
+	if retrieved[0].Name != "Custom Morning" || retrieved[1].Name != "Custom Night" {
+		t.Errorf("unexpected phase names in retrieved phases: %+v", retrieved)
+	}
+
+	// Verify persistence across reload
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("failed to reload config: %v", err)
+	}
+
+	reloaded := mgr2.GetCircadianPhases()
+	if len(reloaded) != 2 {
+		t.Fatalf("expected 2 reloaded phases, got %d", len(reloaded))
+	}
+
+	// Verify validation on invalid phase set
+	invalidPhases := []circadian.SchedulePhase{
+		{Name: "Invalid", StartHour: 10, EndHour: 5, StartTemp: 2700, EndTemp: 5000, StartDimming: 50, EndDimming: 100},
+	}
+	if err := mgr.SetCircadianPhases(invalidPhases); err == nil {
+		t.Errorf("expected error when setting invalid circadian phases, got nil")
+	}
+
+	// Clear phases
+	if err := mgr.SetCircadianPhases(nil); err != nil {
+		t.Fatalf("unexpected error clearing phases: %v", err)
+	}
+	if cleared := mgr.GetCircadianPhases(); cleared != nil {
+		t.Errorf("expected nil after clearing circadian phases, got %v", cleared)
 	}
 }

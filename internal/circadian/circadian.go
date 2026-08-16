@@ -36,13 +36,42 @@ type Info struct {
 	Params  wiz.PilotParams `json:"params"`
 }
 
-// Calculate returns the calculated Info (PilotParams, phase, temp, dimming) for a given time.Time.
-func Calculate(t time.Time) Info {
+// ValidatePhases checks if the provided circadian schedule phases are valid.
+func ValidatePhases(phases []SchedulePhase) error {
+	if len(phases) == 0 {
+		return fmt.Errorf("circadian phases list cannot be empty")
+	}
+	for i, p := range phases {
+		if p.Name == "" {
+			return fmt.Errorf("phase %d has an empty name", i)
+		}
+		if p.StartHour < 0 || p.StartHour >= 24 {
+			return fmt.Errorf("phase %q has invalid start hour %d (must be 0-23)", p.Name, p.StartHour)
+		}
+		if p.EndHour <= p.StartHour || p.EndHour > 24 {
+			return fmt.Errorf("phase %q has invalid end hour %d (must be > start hour %d and <= 24)", p.Name, p.EndHour, p.StartHour)
+		}
+		if p.StartTemp < 2200 || p.StartTemp > 6500 || p.EndTemp < 2200 || p.EndTemp > 6500 {
+			return fmt.Errorf("phase %q has invalid color temperature (must be between 2200K and 6500K)", p.Name)
+		}
+		if p.StartDimming < 10 || p.StartDimming > 100 || p.EndDimming < 10 || p.EndDimming > 100 {
+			return fmt.Errorf("phase %q has invalid dimming percentage (must be between 10%% and 100%%)", p.Name)
+		}
+	}
+	return nil
+}
+
+// CalculateWithPhases returns calculated Info for a given time.Time using custom or default schedule phases.
+func CalculateWithPhases(t time.Time, phases []SchedulePhase) Info {
+	if len(phases) == 0 {
+		phases = DefaultPhases
+	}
+
 	hour := t.Hour()
 	minute := t.Minute()
 	decimalTime := float64(hour) + float64(minute)/60.0
 
-	for _, phase := range DefaultPhases {
+	for _, phase := range phases {
 		start := float64(phase.StartHour)
 		end := float64(phase.EndHour)
 		if decimalTime >= start && decimalTime < end {
@@ -77,6 +106,11 @@ func Calculate(t time.Time) Info {
 		Status:  "Night Rest (2200K, 30%)",
 		Params:  params,
 	}
+}
+
+// Calculate returns the calculated Info (PilotParams, phase, temp, dimming) using default phases for a given time.Time.
+func Calculate(t time.Time) Info {
+	return CalculateWithPhases(t, DefaultPhases)
 }
 
 // ParseTimeArg parses "HH:MM" or "HH" string into a time.Time on the current day.

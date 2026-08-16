@@ -2,6 +2,7 @@ package tui
 
 import (
 	"testing"
+	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/wiz"
 )
 
@@ -361,6 +362,18 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		resErr := ExecuteCommand("circadian 99:99", dev)
 		if resErr.PilotParams != nil {
 			t.Errorf("expected nil PilotParams on invalid time arg")
+		}
+
+		customPhases := []circadian.SchedulePhase{
+			{Name: "Custom Dawn", StartHour: 0, EndHour: 12, StartTemp: 2700, EndTemp: 6000, StartDimming: 50, EndDimming: 100},
+			{Name: "Custom Dusk", StartHour: 12, EndHour: 24, StartTemp: 6000, EndTemp: 2200, StartDimming: 100, EndDimming: 30},
+		}
+		resCustom := ExecuteCommandWithPhases("circadian 14:00", dev, customPhases)
+		if resCustom.PilotParams == nil {
+			t.Fatalf("expected PilotParams for ExecuteCommandWithPhases")
+		}
+		if resCustom.FadeLabel != "🌅 Custom Dusk" {
+			t.Errorf("expected FadeLabel '🌅 Custom Dusk', got %q", resCustom.FadeLabel)
 		}
 	})
 }

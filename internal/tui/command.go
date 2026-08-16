@@ -50,7 +50,8 @@ type CommandHandler func(args []string, activeDev *wiz.Device) CommandActionResu
 
 // CommandRegistry manages registered TUI command verbs and aliases.
 type CommandRegistry struct {
-	handlers map[string]CommandHandler
+	handlers        map[string]CommandHandler
+	circadianPhases []circadian.SchedulePhase
 }
 
 // NewCommandRegistry initializes a default TUI command registry.
@@ -60,6 +61,11 @@ func NewCommandRegistry() *CommandRegistry {
 	}
 	reg.registerDefaults()
 	return reg
+}
+
+// SetCircadianPhases sets the custom circadian schedule phases for rhythm calculation.
+func (r *CommandRegistry) SetCircadianPhases(phases []circadian.SchedulePhase) {
+	r.circadianPhases = phases
 }
 
 // Register adds or replaces a handler for a given verb or alias.
@@ -92,6 +98,12 @@ var defaultRegistry = NewCommandRegistry()
 
 // ExecuteCommand runs a command string against the default global command registry.
 func ExecuteCommand(cmdStr string, activeDev *wiz.Device) CommandActionResult {
+	return defaultRegistry.Execute(cmdStr, activeDev)
+}
+
+// ExecuteCommandWithPhases runs a command string against default global command registry with custom circadian phases.
+func ExecuteCommandWithPhases(cmdStr string, activeDev *wiz.Device, phases []circadian.SchedulePhase) CommandActionResult {
+	defaultRegistry.SetCircadianPhases(phases)
 	return defaultRegistry.Execute(cmdStr, activeDev)
 }
 
@@ -792,7 +804,7 @@ func (r *CommandRegistry) registerDefaults() {
 		if len(args) > 0 {
 			arg := strings.ToLower(args[0])
 			if arg == "info" || arg == "status" {
-				info := circadian.Calculate(targetTime)
+				info := circadian.CalculateWithPhases(targetTime, r.circadianPhases)
 				return CommandActionResult{
 					StatusMsg: fmt.Sprintf("Circadian Status: %s", info.Status),
 				}
@@ -804,7 +816,7 @@ func (r *CommandRegistry) registerDefaults() {
 			targetTime = t
 		}
 
-		info := circadian.Calculate(targetTime)
+		info := circadian.CalculateWithPhases(targetTime, r.circadianPhases)
 		return CommandActionResult{
 			StatusMsg:   fmt.Sprintf("Circadian rhythm set: %s", info.Status),
 			PilotParams: &info.Params,

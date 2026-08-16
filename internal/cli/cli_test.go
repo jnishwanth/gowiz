@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"wiz-tui/internal/circadian"
+	"wiz-tui/internal/config"
 )
 
 func TestCLIRun(t *testing.T) {
@@ -393,6 +396,33 @@ func TestCLIRun(t *testing.T) {
 		}
 		if !strings.Contains(buf.String(), "Circadian rhythm set") {
 			t.Errorf("expected circadian set output, got: %s", buf.String())
+		}
+	})
+
+	t.Run("Circadian_with_custom_config_phases", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		mgr := config.NewManager(cfgPath)
+		_ = mgr.SetCircadianPhases([]circadian.SchedulePhase{
+			{Name: "Shift Morning", StartHour: 0, EndHour: 12, StartTemp: 2200, EndTemp: 6500, StartDimming: 20, EndDimming: 100},
+			{Name: "Shift Evening", StartHour: 12, EndHour: 24, StartTemp: 6500, EndTemp: 2200, StartDimming: 100, EndDimming: 20},
+		})
+
+		var buf bytes.Buffer
+		opts := Options{
+			ConfigPath: cfgPath,
+			TargetIP:   "192.168.1.100",
+			Mock:       true,
+			Command:    "circadian 14:00",
+			Writer:     &buf,
+		}
+
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Shift Evening") {
+			t.Errorf("expected output to contain custom phase 'Shift Evening', got: %s", buf.String())
 		}
 	})
 
