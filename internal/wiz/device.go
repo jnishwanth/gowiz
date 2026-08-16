@@ -412,10 +412,20 @@ func (r *DeviceRegistry) GetDevicesByGroup(group string, groups map[string][]str
 	return result
 }
 
-// GetDevicesByGroupOrRoom resolves devices by custom group first, falling back to room name matching.
-func (r *DeviceRegistry) GetDevicesByGroupOrRoom(target string, groups map[string][]string) []*Device {
+// GetDevicesBySelector resolves devices by wildcard target ("all", "*", "everyone", "broadcast"), custom group, or room name.
+func (r *DeviceRegistry) GetDevicesBySelector(target string, groups map[string][]string) []*Device {
+	targetLower := strings.ToLower(strings.TrimSpace(target))
+	if targetLower == "all" || targetLower == "*" || targetLower == "everyone" || targetLower == "broadcast" {
+		return r.List()
+	}
 	if devs := r.GetDevicesByGroup(target, groups); len(devs) > 0 {
 		return devs
 	}
 	return r.GetDevicesByRoom(target)
 }
+
+// GetDevicesByGroupOrRoom resolves devices by selector (all/wildcard, custom group, or room name).
+func (r *DeviceRegistry) GetDevicesByGroupOrRoom(target string, groups map[string][]string) []*Device {
+	return r.GetDevicesBySelector(target, groups)
+}
+

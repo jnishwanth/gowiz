@@ -213,6 +213,34 @@ func TestServerPilot(t *testing.T) {
 			t.Errorf("expected 400 Bad Request, got %d", resp.StatusCode)
 		}
 	})
+
+	t.Run("Send pilot broadcast to all devices", func(t *testing.T) {
+		st := true
+		dim := 90
+		body, _ := json.Marshal(PilotRequest{
+			All:     true,
+			State:   &st,
+			Dimming: &dim,
+		})
+
+		resp, err := http.Post(ts.URL+"/api/v1/pilot", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/pilot broadcast: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200 for broadcast, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode broadcast response JSON: %v", err)
+		}
+		if res["target"] != "all" || res["devicesCount"] == float64(0) {
+			t.Errorf("unexpected broadcast response payload: %+v", res)
+		}
+	})
 }
 
 func TestServerPresets(t *testing.T) {

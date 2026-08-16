@@ -192,4 +192,26 @@ func TestDeviceRegistry(t *testing.T) {
 			t.Errorf("expected fallback room device 192.168.1.51, got %v", rDevs)
 		}
 	})
+
+	t.Run("GetDevicesBySelector with all/wildcard targets", func(t *testing.T) {
+		regAll := NewDeviceRegistry()
+		d1 := NewDevice("192.168.1.10")
+		d2 := NewDevice("192.168.1.11")
+		regAll.AddOrUpdate(d1)
+		regAll.AddOrUpdate(d2)
+
+		groups := map[string][]string{"office": {"192.168.1.10"}}
+
+		for _, wildcard := range []string{"all", "ALL", "*", "everyone", "broadcast"} {
+			devs := regAll.GetDevicesBySelector(wildcard, groups)
+			if len(devs) != 3 {
+				t.Errorf("expected 3 devices for wildcard %q, got %d", wildcard, len(devs))
+			}
+		}
+
+		groupDevs := regAll.GetDevicesBySelector("office", groups)
+		if len(groupDevs) != 1 || groupDevs[0].IP != "192.168.1.10" {
+			t.Errorf("expected 1 device for group 'office', got %v", groupDevs)
+		}
+	})
 }

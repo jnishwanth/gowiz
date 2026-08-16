@@ -757,6 +757,49 @@ func (r *CommandRegistry) registerDefaults() {
 	}
 	r.Register("group", groupHandler)
 
+	// Broadcast to All Devices Verbs (:all, :broadcast, :everyone)
+	allHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{
+				TargetRoom: "all",
+				StatusMsg:  "Targeting all devices",
+			}
+		}
+
+		subIdx := -1
+		for i := 0; i < len(args); i++ {
+			verb := strings.ToLower(args[i])
+			if _, found := r.handlers[verb]; found {
+				subIdx = i
+				break
+			}
+		}
+
+		if subIdx != -1 {
+			subVerb := strings.ToLower(args[subIdx])
+			subCmdStr := strings.Join(args[subIdx:], " ")
+			if (subVerb == "circadian" || subVerb == "rhythm") && !strings.Contains(strings.ToLower(subCmdStr), "room") {
+				rest := strings.Join(args[subIdx+1:], " ")
+				subCmdStr = fmt.Sprintf("%s room all %s", subVerb, rest)
+			}
+
+			subRes := r.Execute(subCmdStr, activeDev)
+			subRes.TargetRoom = "all"
+			if subRes.PilotParams != nil || subRes.ApplyPresetName != "" || subRes.IsFadeCommand || subRes.EffectConfig != nil {
+				subRes.StatusMsg = fmt.Sprintf("Broadcast command '%s' sent to all devices", strings.TrimSpace(subCmdStr))
+			}
+			return subRes
+		}
+
+		return CommandActionResult{
+			TargetRoom: "all",
+			StatusMsg:  "Targeting all devices",
+		}
+	}
+	r.Register("all", allHandler)
+	r.Register("broadcast", allHandler)
+	r.Register("everyone", allHandler)
+
 	// Preset Management & Activation Verbs
 	presetHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
 		if len(args) == 0 {

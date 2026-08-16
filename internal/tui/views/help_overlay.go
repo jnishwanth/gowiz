@@ -54,6 +54,7 @@ func RenderHelpOverlay(width, height int) string {
 				{":group set <n> <ip...>", "Create custom multi-device group (e.g. :group set desk 192.168.1.50...)"},
 				{":group delete <n>", "Delete custom device group"},
 				{":group list", "List all configured custom device groups"},
+				{":all <cmd>", "Broadcast command to all devices (e.g. :all off, :all sunset)"},
 				{":preset <name>", "Apply preset (evening, movie, night, focus, relax...)"},
 				{":preset save <name>", "Save active light state as custom preset"},
 				{":presets", "List all built-in and saved custom presets"},

@@ -395,6 +395,8 @@ type PilotRequest struct {
 	IP      string `json:"ip,omitempty"`
 	Room    string `json:"room,omitempty"`
 	Group   string `json:"group,omitempty"`
+	Target  string `json:"target,omitempty"`
+	All     bool   `json:"all,omitempty"`
 	State   *bool  `json:"state,omitempty"`
 	Dimming *int   `json:"dimming,omitempty"`
 	Temp    *int   `json:"temp,omitempty"`
@@ -435,6 +437,12 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 	targetGroup := req.Group
 	if targetGroup == "" {
 		targetGroup = req.Room
+	}
+	if targetGroup == "" {
+		targetGroup = req.Target
+	}
+	if req.All && targetGroup == "" {
+		targetGroup = "all"
 	}
 	if targetGroup != "" {
 		var groups map[string][]string

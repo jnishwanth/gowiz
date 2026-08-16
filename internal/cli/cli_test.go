@@ -665,4 +665,36 @@ func TestCLIRun(t *testing.T) {
 			t.Errorf("expected discovery JSON output, got: %s", buf.String())
 		}
 	})
+
+	t.Run("Broadcast_and_all_device_CLI_execution", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		mgr := config.NewManager(cfgPath)
+		_ = mgr.AddRecentIP("192.168.1.100")
+		_ = mgr.AddRecentIP("192.168.1.101")
+
+		var buf bytes.Buffer
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Command:    "all off",
+			Writer:     &buf,
+		}
+
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error running 'all off': %v", err)
+		}
+
+		buf.Reset()
+		opts.JSONOutput = true
+		opts.Command = "broadcast warm"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error running 'broadcast warm': %v", err)
+		}
+		if !strings.Contains(buf.String(), `"target": "all"`) && !strings.Contains(buf.String(), `"status": "ok"`) {
+			t.Errorf("expected broadcast JSON output, got: %s", buf.String())
+		}
+	})
 }

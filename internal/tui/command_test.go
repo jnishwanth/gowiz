@@ -485,4 +485,26 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected Scan true for :discover command")
 		}
 	})
+
+	t.Run("Broadcast and All device commands", func(t *testing.T) {
+		resAllOff := ExecuteCommand("all off", dev)
+		if resAllOff.TargetRoom != "all" || resAllOff.PilotParams == nil || *resAllOff.PilotParams.State != false {
+			t.Errorf("expected TargetRoom 'all' with State=false, got %+v", resAllOff)
+		}
+
+		resBroadcastSunset := ExecuteCommand("broadcast scene sunset", dev)
+		if resBroadcastSunset.TargetRoom != "all" || resBroadcastSunset.PilotParams == nil || *resBroadcastSunset.PilotParams.SceneID != 3 {
+			t.Errorf("expected TargetRoom 'all' with SceneID=3, got %+v", resBroadcastSunset)
+		}
+
+		resEveryoneCirc := ExecuteCommand("everyone circadian 12:00", dev)
+		if resEveryoneCirc.TargetRoom != "all" || resEveryoneCirc.PilotParams == nil {
+			t.Errorf("expected TargetRoom 'all' with circadian PilotParams, got %+v", resEveryoneCirc)
+		}
+
+		resBareAll := ExecuteCommand("all", dev)
+		if resBareAll.TargetRoom != "all" {
+			t.Errorf("expected TargetRoom 'all' for bare :all command")
+		}
+	})
 }

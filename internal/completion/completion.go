@@ -33,7 +33,7 @@ _gowiz_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval --server -s --port --api-key --webhook"
-    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd serve server flash pulse strobe rainbow effect cat category categories info diag status config recent export import undo help scan discover quit completion"
+    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group all broadcast everyone fade sunrise circadian rhythm daemon schedule service systemd launchd serve server flash pulse strobe rainbow effect cat category categories info diag status config recent export import undo help scan discover quit completion"
     presets="evening movie night focus work relax party list save delete"
     groups="list set create delete rm"
     effects="flash pulse strobe rainbow"
@@ -97,6 +97,8 @@ _gowiz() {
         'preset:Manage or apply lighting presets'
         'room:Assign device to room'
         'group:Manage device groups or execute batch command'
+        'all:Broadcast command to all registered devices'
+        'broadcast:Broadcast command to all registered devices'
         'fade:Start linear dimming fade transition'
         'sunrise:Start sunrise lighting simulation'
         'sunset:Start sunset lighting simulation'
@@ -202,6 +204,8 @@ complete -c gowiz -n "__fish_use_subcommand" -a dim -d "Set brightness level"
 complete -c gowiz -n "__fish_use_subcommand" -a preset -d "Manage or apply lighting presets"
 complete -c gowiz -n "__fish_use_subcommand" -a room -d "Assign device to room"
 complete -c gowiz -n "__fish_use_subcommand" -a group -d "Manage device groups or execute batch command"
+complete -c gowiz -n "__fish_use_subcommand" -a all -d "Broadcast command to all registered devices"
+complete -c gowiz -n "__fish_use_subcommand" -a broadcast -d "Broadcast command to all registered devices"
 complete -c gowiz -n "__fish_use_subcommand" -a fade -d "Start linear dimming fade transition"
 complete -c gowiz -n "__fish_use_subcommand" -a circadian -d "Apply 24-hour circadian lighting rhythm"
 complete -c gowiz -n "__fish_use_subcommand" -a daemon -d "Run background circadian schedule sync daemon"
