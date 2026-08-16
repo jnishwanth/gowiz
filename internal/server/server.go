@@ -128,6 +128,7 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/api/v1/scenes", s.wrapFunc(s.handleScenes, true))
 	mux.Handle("/api/v1/circadian", s.wrapFunc(s.handleCircadian, true))
 	mux.Handle("/api/v1/command", s.wrapFunc(s.handleCommand, true))
+	mux.Handle("/api/v1/config", s.wrapFunc(s.handleConfig, true))
 	mux.Handle("/events", s.wrap(s.broadcaster, true))
 	mux.Handle("/api/v1/events", s.wrap(s.broadcaster, true))
 	return mux
@@ -1093,6 +1094,99 @@ func (s *Server) handleRooms(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) syncRegistryConfig() {
+	if s.cfg.ConfigMgr != nil && s.cfg.DevRegistry != nil {
+		c := s.cfg.ConfigMgr.GetConfig()
+		s.cfg.DevRegistry.ApplyAliases(c.DeviceAliases)
+		s.cfg.DevRegistry.ApplyRooms(c.DeviceRooms)
+	}
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cfg.ConfigMgr == nil {
+		if r.Method == http.MethodGet {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"status": "ok",
+				"config": config.DefaultConfig(),
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "config manager not initialized")
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "ok",
+			"config": s.cfg.ConfigMgr.GetConfig(),
+		})
+		return
+	}
+
+	var body struct {
+		Identifier string            `json:"identifier,omitempty"`
+		IP         string            `json:"ip,omitempty"`
+		Alias      string            `json:"alias,omitempty"`
+		Room       string            `json:"room,omitempty"`
+		Aliases    map[string]string `json:"aliases,omitempty"`
+		Rooms      map[string]string `json:"rooms,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON payload: %v", err))
+		return
+	}
+
+	id := strings.TrimSpace(body.Identifier)
+	if id == "" {
+		id = strings.TrimSpace(body.IP)
+	}
+
+	if id != "" {
+		if body.Alias != "" {
+			_ = s.cfg.ConfigMgr.SetAlias(id, body.Alias)
+		}
+		if body.Room != "" {
+			_ = s.cfg.ConfigMgr.SetRoom(id, body.Room)
+		}
+	}
+
+	if len(body.Aliases) > 0 {
+		for k, v := range body.Aliases {
+			_ = s.cfg.ConfigMgr.SetAlias(k, v)
+		}
+	}
+
+	if len(body.Rooms) > 0 {
+		for k, v := range body.Rooms {
+			_ = s.cfg.ConfigMgr.SetRoom(k, v)
+		}
+	}
+
+	s.syncRegistryConfig()
+
+	updated := s.cfg.ConfigMgr.GetConfig()
+
+	s.broadcaster.Publish(Event{
+		Type:    EventConfigUpdated,
+		Status:  "ok",
+		Payload: updated,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"config": updated,
+	})
+}
+
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1241,6 +1335,16 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},
+			"/api/v1/config": map[string]any{
+				"get": map[string]any{
+					"summary":   "Get full persistent configuration settings (aliases, rooms, groups, presets, recent IPs)",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+				"post": map[string]any{
+					"summary":   "Update bulb aliases and room assignments in persistent user configuration",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
 			"/api/v1/events": map[string]any{
 				"get": map[string]any{
 					"summary":   "Server-Sent Events (SSE) live streaming endpoint",
@@ -1343,6 +1447,12 @@ a:hover { text-decoration: underline; }
   <span class="method post">POST</span><span class="endpoint">/api/v1/command</span>
   <p>Execute arbitrary gowiz command string (e.g., "sunset", "warm", "group Bedroom off").</p>
   <pre>{"command": "ocean", "room": "Living Room"}</pre>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/config</span>
+  <p>GET retrieves persistent configuration settings. POST updates bulb aliases and room assignments.</p>
+  <pre>{"ip": "192.168.1.50", "alias": "Desk Lamp", "room": "Office"}</pre>
 </div>
 
 <div class="card">

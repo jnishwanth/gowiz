@@ -21,6 +21,7 @@ const (
 	EventCircadianTick     EventType = "circadian_tick"
 	EventWebhookTest       EventType = "webhook_test"
 	EventDevicesDiscovered EventType = "devices_discovered"
+	EventConfigUpdated     EventType = "config_updated"
 )
 
 // Event defines the structured payload broadcast to SSE subscribers and webhooks.

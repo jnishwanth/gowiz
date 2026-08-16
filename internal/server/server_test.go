@@ -1290,3 +1290,118 @@ func TestServerScenes(t *testing.T) {
 		}
 	})
 }
+
+func TestServerConfig(t *testing.T) {
+	srv, reg := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET /api/v1/config", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/config")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/config: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		if data["status"] != "ok" {
+			t.Errorf("expected status 'ok', got %v", data["status"])
+		}
+		if _, ok := data["config"].(map[string]any); !ok {
+			t.Errorf("expected config object in response, got %v", data["config"])
+		}
+	})
+
+	t.Run("POST /api/v1/config - single alias and room update", func(t *testing.T) {
+		payload := map[string]string{
+			"ip":    "192.168.1.50",
+			"alias": "Desk Lamp",
+			"room":  "Office",
+		}
+		bodyBytes, _ := json.Marshal(payload)
+
+		resp, err := http.Post(ts.URL+"/api/v1/config", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/config: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+		if data["status"] != "ok" {
+			t.Errorf("expected status 'ok', got %v", data["status"])
+		}
+
+		// Verify Registry updated
+		dev, found := reg.Get("192.168.1.50")
+		if !found {
+			t.Fatalf("expected device 192.168.1.50 in registry")
+		}
+		if dev.Name != "Desk Lamp" {
+			t.Errorf("expected device name 'Desk Lamp', got '%s'", dev.Name)
+		}
+		if dev.Room != "Office" {
+			t.Errorf("expected device room 'Office', got '%s'", dev.Room)
+		}
+	})
+
+	t.Run("POST /api/v1/config - bulk maps update", func(t *testing.T) {
+		payload := map[string]any{
+			"aliases": map[string]string{
+				"192.168.1.51": "Master Bed Light",
+			},
+			"rooms": map[string]string{
+				"192.168.1.51": "Master Bedroom",
+			},
+		}
+		bodyBytes, _ := json.Marshal(payload)
+
+		resp, err := http.Post(ts.URL+"/api/v1/config", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/config: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		dev, found := reg.Get("192.168.1.51")
+		if !found {
+			t.Fatalf("expected device 192.168.1.51 in registry")
+		}
+		if dev.Name != "Master Bed Light" {
+			t.Errorf("expected device name 'Master Bed Light', got '%s'", dev.Name)
+		}
+		if dev.Room != "Master Bedroom" {
+			t.Errorf("expected device room 'Master Bedroom', got '%s'", dev.Room)
+		}
+	})
+
+	t.Run("DELETE /api/v1/config - method not allowed", func(t *testing.T) {
+		req, _ := http.NewRequest("DELETE", ts.URL+"/api/v1/config", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed DELETE /api/v1/config: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+		}
+	})
+}
