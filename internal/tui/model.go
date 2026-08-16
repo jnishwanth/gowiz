@@ -124,13 +124,20 @@ func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
 	for _, dev := range targets {
 		ips = append(ips, dev.IP)
 
+		st := dev.State
+		dim := dev.Brightness
+		r, g, b := dev.RGB[0], dev.RGB[1], dev.RGB[2]
+		temp := dev.Temp
+		sc := dev.SceneID
+		sp := dev.Speed
+
 		prev := wiz.PilotParams{
-			State:   &dev.State,
-			Dimming: &dev.Brightness,
-			R:       &dev.RGB[0], G: &dev.RGB[1], B: &dev.RGB[2],
-			Temp:    &dev.Temp,
-			SceneID: &dev.SceneID,
-			Speed:   &dev.Speed,
+			State:   &st,
+			Dimming: &dim,
+			R:       &r, G: &g, B: &b,
+			Temp:    &temp,
+			SceneID: &sc,
+			Speed:   &sp,
 		}
 		m.undoStack[dev.IP] = append(m.undoStack[dev.IP], prev)
 	}
@@ -489,6 +496,33 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 		switch verb {
 		case "q", "quit", "exit":
 			return m, tea.Quit
+
+		case "h", "help":
+			m.mode = ModeHelp
+			return m, nil
+
+		case "on":
+			m.setStatusMessage("Turning on lights...")
+			return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
+
+		case "off":
+			m.setStatusMessage("Turning off lights...")
+			return m, m.dispatchPilotCmd(wiz.NewPowerParams(false))
+
+		case "power":
+			if len(parts) > 1 {
+				arg := strings.ToLower(parts[1])
+				if arg == "on" || arg == "true" || arg == "1" {
+					return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
+				} else if arg == "off" || arg == "false" || arg == "0" {
+					return m, m.dispatchPilotCmd(wiz.NewPowerParams(false))
+				}
+			}
+			active, ok := m.Registry.GetActive()
+			if ok {
+				return m, m.dispatchPilotCmd(wiz.NewPowerParams(!active.State))
+			}
+			return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
 
 		case "scan":
 			m.setStatusMessage("Scanning network...")

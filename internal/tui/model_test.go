@@ -280,4 +280,294 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected ModeNormal and PanelScenes focus after Enter in search, got mode=%v panel=%v", m.mode, m.activePanel)
 		}
 	})
+
+	t.Run("Command mode buffer, execution, and verb dispatches", func(t *testing.T) {
+		// Enter command mode with ':'
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		if m.mode != ModeCommand {
+			t.Fatalf("expected ModeCommand, got %v", m.mode)
+		}
+
+		// Test backspace and key appending
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+		m = updated.(Model)
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+		if m.commandBuffer != "" {
+			t.Errorf("expected empty buffer after backspace, got %q", m.commandBuffer)
+		}
+
+		// Test :dim 75
+		for _, r := range "dim 75" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ := m.Registry.GetActive()
+		if dev.Brightness != 75 {
+			t.Errorf("expected brightness 75 after :dim 75, got %d", dev.Brightness)
+		}
+
+		// Test :temp 4000
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "temp 4000" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.Temp != 4000 {
+			t.Errorf("expected temp 4000 after :temp 4000, got %d", dev.Temp)
+		}
+
+		// Test :rgb 255 128 64
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "rgb 255 128 64" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.RGB != [3]int{255, 128, 64} {
+			t.Errorf("expected RGB [255,128,64], got %v", dev.RGB)
+		}
+
+		// Test :scene Ocean
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "scene Ocean" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.SceneID != 1 {
+			t.Errorf("expected SceneID 1 after :scene Ocean, got %d", dev.SceneID)
+		}
+
+		// Test :timer 20
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "timer 20" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if m.sleepTimerSecs != 20*60 {
+			t.Errorf("expected sleepTimerSecs 1200, got %d", m.sleepTimerSecs)
+		}
+
+		// Test :on and :off
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "off" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.State != false {
+			t.Errorf("expected state false after :off, got %v", dev.State)
+		}
+
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "on" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.State != true {
+			t.Errorf("expected state true after :on, got %v", dev.State)
+		}
+
+		// Test :help
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "help" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if m.mode != ModeHelp {
+			t.Errorf("expected ModeHelp after :help, got %v", m.mode)
+		}
+		// Exit help overlay
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		m = updated.(Model)
+		if m.mode != ModeNormal {
+			t.Errorf("expected ModeNormal after exiting help, got %v", m.mode)
+		}
+
+		// Test unknown command
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "unknowncmd" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if !strings.Contains(m.statusMessage, "Unknown command") {
+			t.Errorf("expected status message for unknown command, got %q", m.statusMessage)
+		}
+	})
+
+	t.Run("Navigation, shortcuts, speed adjustments, and undo stack", func(t *testing.T) {
+		m.searchQuery = ""
+		// Test j/k navigation in PanelDevices
+		m.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.120"))
+		m.activePanel = PanelDevices
+		m.deviceCursor = 0
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = updated.(Model)
+		if m.deviceCursor != 1 {
+			t.Errorf("expected deviceCursor 1 after 'j', got %d", m.deviceCursor)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		m = updated.(Model)
+		if m.deviceCursor != 0 {
+			t.Errorf("expected deviceCursor 0 after 'k', got %d", m.deviceCursor)
+		}
+
+		// Test j/k navigation in PanelControl (dimming adjustments)
+		m.activePanel = PanelControl
+		dev, _ := m.Registry.GetActive()
+		initDim := dev.Brightness
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.Brightness >= initDim {
+			t.Errorf("expected brightness decrease on 'j' in PanelControl, got %d", dev.Brightness)
+		}
+
+		m.activePanel = PanelScenes
+		m.sceneCursor = 0
+
+		// Test j/k navigation in PanelScenes
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = updated.(Model)
+		if m.sceneCursor != 1 {
+			t.Errorf("expected sceneCursor 1 after 'j', got %d", m.sceneCursor)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		m = updated.(Model)
+		if m.sceneCursor != 0 {
+			t.Errorf("expected sceneCursor 0 after 'k', got %d", m.sceneCursor)
+		}
+
+		// Test G / home / end navigation in PanelScenes
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+		m = updated.(Model)
+		scenesCount := len(wiz.FilterScenes(""))
+		if m.sceneCursor != scenesCount-1 {
+			t.Errorf("expected sceneCursor %d after 'G', got %d", scenesCount-1, m.sceneCursor)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyHome})
+		m = updated.(Model)
+		if m.sceneCursor != 0 {
+			t.Errorf("expected sceneCursor 0 after Home, got %d", m.sceneCursor)
+		}
+
+		// Test numeric key shortcuts 1-9
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.SceneID != 3 {
+			t.Errorf("expected SceneID 3 after pressing '3', got %d", dev.SceneID)
+		}
+
+		// Test speed adjustment '[' and ']'
+		prevSpeed := dev.Speed
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.Speed <= prevSpeed {
+			t.Errorf("expected speed increase after ']', got prev %d vs new %d", prevSpeed, dev.Speed)
+		}
+
+		// Test undo ('u')
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.Speed != prevSpeed {
+			t.Errorf("expected speed restored to %d after undo 'u', got %d", prevSpeed, dev.Speed)
+		}
+
+		// Test sleep timer shortcut ('t')
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		m = updated.(Model)
+		if m.sleepTimerSecs != 15*60 {
+			t.Errorf("expected 900s sleep timer after 't', got %d", m.sleepTimerSecs)
+		}
+
+		// Test rescan shortcut ('R')
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+		m = updated.(Model)
+		if !strings.Contains(m.statusMessage, "Rescanning") {
+			t.Errorf("expected status message for rescan, got %q", m.statusMessage)
+		}
+	})
 }
