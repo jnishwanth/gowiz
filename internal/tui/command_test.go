@@ -161,6 +161,28 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("Room and Group command dispatches", func(t *testing.T) {
+		resRoom := ExecuteCommand("room Living Room", dev)
+		if resRoom.SetDeviceRoom != "Living Room" {
+			t.Errorf("expected SetDeviceRoom 'Living Room', got '%s'", resRoom.SetDeviceRoom)
+		}
+
+		resClear := ExecuteCommand("room clear", dev)
+		if resClear.SetDeviceRoom != "CLEAR" {
+			t.Errorf("expected SetDeviceRoom 'CLEAR' for :room clear, got '%s'", resClear.SetDeviceRoom)
+		}
+
+		resGroupOn := ExecuteCommand("group Living Room on", dev)
+		if resGroupOn.TargetRoom != "Living Room" || resGroupOn.PilotParams == nil || *resGroupOn.PilotParams.State != true {
+			t.Errorf("expected group ON command target 'Living Room', got TargetRoom: '%s'", resGroupOn.TargetRoom)
+		}
+
+		resGroupDim := ExecuteCommand("group Master Bedroom dim 60", dev)
+		if resGroupDim.TargetRoom != "Master Bedroom" || resGroupDim.PilotParams == nil || *resGroupDim.PilotParams.Dimming != 60 {
+			t.Errorf("expected group dim 60 command target 'Master Bedroom', got TargetRoom: '%s'", resGroupDim.TargetRoom)
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {

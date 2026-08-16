@@ -839,4 +839,74 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected status message showing recent target 192.168.1.222, got %q", m.statusMessage)
 		}
 	})
+
+	t.Run("Room assignment and group command batch dispatches in Model", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "model_room_test.json")
+
+		mockClient := wiz.NewMockClient()
+		m := NewModelWithConfig(mockClient, "192.168.1.10", cfgPath)
+
+		// Add two lights
+		m.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.11"))
+
+		// Assign room 'Living Room' to active device (192.168.1.10)
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "room Living Room" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		dev10, _ := m.Registry.Get("192.168.1.10")
+		if dev10.Room != "Living Room" {
+			t.Errorf("expected dev10 room 'Living Room', got '%s'", dev10.Room)
+		}
+
+		// Assign room 'Living Room' to second device (192.168.1.11)
+		m.setActiveDevice("192.168.1.11")
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "room Living Room" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		dev11, _ := m.Registry.Get("192.168.1.11")
+		if dev11.Room != "Living Room" {
+			t.Errorf("expected dev11 room 'Living Room', got '%s'", dev11.Room)
+		}
+
+		// Run group command :group Living Room dim 80
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "group Living Room dim 80" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+
+		dev10, _ = m.Registry.Get("192.168.1.10")
+		dev11, _ = m.Registry.Get("192.168.1.11")
+		if dev10.Brightness != 80 || dev11.Brightness != 80 {
+			t.Errorf("expected both Living Room lights updated to dim 80, got dev10: %d, dev11: %d", dev10.Brightness, dev11.Brightness)
+		}
+
+		// Reload model to test room persistence
+		mRestored := NewModelWithConfig(mockClient, "192.168.1.10", cfgPath)
+		rDev10, _ := mRestored.Registry.Get("192.168.1.10")
+		if rDev10.Room != "Living Room" {
+			t.Errorf("expected restored room 'Living Room', got '%s'", rDev10.Room)
+		}
+	})
 }

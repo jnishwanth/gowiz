@@ -110,4 +110,28 @@ func TestDeviceRegistry(t *testing.T) {
 			t.Errorf("expected alias 'Kitchen Ceiling', got '%s' (ok: %v)", fetched.Name, ok)
 		}
 	})
+
+	t.Run("ApplyRooms, SetRoom, and GetDevicesByRoom", func(t *testing.T) {
+		regRooms := NewDeviceRegistry()
+		regRooms.ApplyRooms(map[string]string{
+			"192.168.1.210": "Living Room",
+		})
+
+		dev1 := NewDevice("192.168.1.210")
+		dev2 := NewDevice("192.168.1.211")
+		regRooms.AddOrUpdate(dev1)
+		regRooms.AddOrUpdate(dev2)
+
+		regRooms.SetRoom("192.168.1.211", "living room") // case insensitive matching test
+
+		livingDevices := regRooms.GetDevicesByRoom("Living Room")
+		if len(livingDevices) != 2 {
+			t.Errorf("expected 2 devices in Living Room, got %d", len(livingDevices))
+		}
+
+		dev, _ := regRooms.Get("192.168.1.210")
+		if dev.Room != "Living Room" {
+			t.Errorf("expected device room 'Living Room', got '%s'", dev.Room)
+		}
+	})
 }

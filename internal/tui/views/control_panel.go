@@ -38,8 +38,12 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 			rssiStr = fmt.Sprintf("📶 %d dBm", dev.Rssi)
 		}
 		rssiPill := lipgloss.NewStyle().Foreground(styles.Subtext0).Render(rssiStr)
+		roomStr := ""
+		if dev.Room != "" {
+			roomStr = fmt.Sprintf(" │ 🏠 %s", lipgloss.NewStyle().Foreground(styles.Teal).Render(dev.Room))
+		}
 
-		sb.WriteString(fmt.Sprintf("%s │ %s │ %s\n", targetIP, powerStatus, rssiPill))
+		sb.WriteString(fmt.Sprintf("%s │ %s │ %s%s\n", targetIP, powerStatus, rssiPill, roomStr))
 
 		// Sleep Countdown Badge if running
 		if sleepTimerSecs > 0 {

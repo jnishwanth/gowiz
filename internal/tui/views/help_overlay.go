@@ -49,6 +49,8 @@ func RenderHelpOverlay(width, height int) string {
 			Title: "Command Mode (:) & Search (/)",
 			Keys: [][2]string{
 				{":name <alias>", "Rename active light & persist to config file"},
+				{":room <room>", "Assign room to active light (or :room clear)"},
+				{":group <room> <cmd>", "Batch control room group (e.g. :group Living Room on)"},
 				{":ip <address>", "Connect / add target bulb IP (e.g. :ip 192.168.1.50)"},
 				{":recent", "List recently targeted bulb IP addresses"},
 				{":config", "Display configuration status & saved alias count"},

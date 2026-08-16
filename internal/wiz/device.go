@@ -2,6 +2,7 @@ package wiz
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -81,6 +82,7 @@ type DeviceRegistry struct {
 	mu           sync.RWMutex
 	devices      map[string]*Device
 	aliases      map[string]string // Persistent alias mapping (IP/MAC -> Custom Name)
+	rooms        map[string]string // Persistent room mapping (IP/MAC -> Room Name)
 	order        []string          // Ordering of IPs for UI rendering
 	activeTarget string            // IP of currently focused bulb
 }
@@ -89,6 +91,7 @@ func NewDeviceRegistry() *DeviceRegistry {
 	reg := &DeviceRegistry{
 		devices: make(map[string]*Device),
 		aliases: make(map[string]string),
+		rooms:   make(map[string]string),
 	}
 	// Seed with FallbackIP
 	reg.AddOrUpdate(NewDevice(FallbackIP))
@@ -119,12 +122,38 @@ func (r *DeviceRegistry) ApplyAliases(aliases map[string]string) {
 	}
 }
 
+// ApplyRooms sets multiple bulb room mappings and updates existing matching devices.
+func (r *DeviceRegistry) ApplyRooms(rooms map[string]string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.rooms == nil {
+		r.rooms = make(map[string]string)
+	}
+	for k, v := range rooms {
+		r.rooms[k] = v
+	}
+
+	for _, dev := range r.devices {
+		if room, ok := r.rooms[dev.IP]; ok && room != "" {
+			dev.Room = room
+		} else if dev.MAC != "" {
+			if room, ok := r.rooms[dev.MAC]; ok && room != "" {
+				dev.Room = room
+			}
+		}
+	}
+}
+
 func (r *DeviceRegistry) AddOrUpdate(dev *Device) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.aliases == nil {
 		r.aliases = make(map[string]string)
+	}
+	if r.rooms == nil {
+		r.rooms = make(map[string]string)
 	}
 
 	if existing, found := r.devices[dev.IP]; found {
@@ -140,12 +169,26 @@ func (r *DeviceRegistry) AddOrUpdate(dev *Device) {
 				existing.Name = alias
 			}
 		}
+		if room, ok := r.rooms[dev.IP]; ok && room != "" {
+			existing.Room = room
+		} else if dev.MAC != "" {
+			if room, ok := r.rooms[dev.MAC]; ok && room != "" {
+				existing.Room = room
+			}
+		}
 	} else {
 		if alias, ok := r.aliases[dev.IP]; ok && alias != "" {
 			dev.Name = alias
 		} else if dev.MAC != "" {
 			if alias, ok := r.aliases[dev.MAC]; ok && alias != "" {
 				dev.Name = alias
+			}
+		}
+		if room, ok := r.rooms[dev.IP]; ok && room != "" {
+			dev.Room = room
+		} else if dev.MAC != "" {
+			if room, ok := r.rooms[dev.MAC]; ok && room != "" {
+				dev.Room = room
 			}
 		}
 		r.devices[dev.IP] = dev
@@ -258,4 +301,35 @@ func (r *DeviceRegistry) SelectAll() {
 	for _, dev := range r.devices {
 		dev.Selected = true
 	}
+}
+
+func (r *DeviceRegistry) SetRoom(ip string, room string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.rooms == nil {
+		r.rooms = make(map[string]string)
+	}
+	r.rooms[ip] = room
+
+	if dev, found := r.devices[ip]; found {
+		dev.Room = room
+		return true
+	}
+	return false
+}
+
+func (r *DeviceRegistry) GetDevicesByRoom(room string) []*Device {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*Device
+	for _, ip := range r.order {
+		if dev, found := r.devices[ip]; found {
+			if strings.EqualFold(dev.Room, room) {
+				result = append(result, dev)
+			}
+		}
+	}
+	return result
 }

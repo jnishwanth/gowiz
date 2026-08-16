@@ -40,6 +40,7 @@ func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) 
 
 	reg := wiz.NewDeviceRegistry()
 	reg.ApplyAliases(cfg.DeviceAliases)
+	reg.ApplyRooms(cfg.DeviceRooms)
 
 	for _, recIP := range cfg.RecentIPs {
 		if recIP != "" && recIP != wiz.FallbackIP {
@@ -150,8 +151,7 @@ func (m Model) pollTelemetryCmd() tea.Cmd {
 	}
 }
 
-func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
-	targets := m.Registry.GetSelectedOrActive()
+func (m Model) dispatchPilotCmdToDevices(targets []*wiz.Device, params wiz.PilotParams) tea.Cmd {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -191,6 +191,10 @@ func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
 		}
 		return CommandFinishedMsg{Err: nil, IPs: ips, Params: params}
 	}
+}
+
+func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
+	return m.dispatchPilotCmdToDevices(m.Registry.GetSelectedOrActive(), params)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -606,6 +610,36 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			if m.configManager != nil {
 				_ = m.configManager.SetAlias(activeDev.IP, res.NewDeviceName)
 			}
+		}
+
+		if res.SetDeviceRoom != "" && activeDev != nil {
+			if res.SetDeviceRoom == "CLEAR" {
+				m.Registry.SetRoom(activeDev.IP, "")
+				if m.configManager != nil {
+					_ = m.configManager.SetRoom(activeDev.IP, "")
+				}
+			} else {
+				m.Registry.SetRoom(activeDev.IP, res.SetDeviceRoom)
+				if m.configManager != nil {
+					_ = m.configManager.SetRoom(activeDev.IP, res.SetDeviceRoom)
+				}
+			}
+		}
+
+		if res.TargetRoom != "" {
+			roomDevs := m.Registry.GetDevicesByRoom(res.TargetRoom)
+			if len(roomDevs) == 0 {
+				m.setStatusMessage(fmt.Sprintf("No devices found in room '%s'", res.TargetRoom))
+				return m, nil
+			}
+			if res.PilotParams != nil {
+				if res.StatusMsg != "" {
+					m.setStatusMessage(res.StatusMsg)
+				}
+				return m, m.dispatchPilotCmdToDevices(roomDevs, *res.PilotParams)
+			}
+			m.setStatusMessage(fmt.Sprintf("Room '%s' has %d device(s)", res.TargetRoom, len(roomDevs)))
+			return m, nil
 		}
 
 		if res.StatusMsg != "" {

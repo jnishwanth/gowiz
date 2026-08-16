@@ -51,14 +51,18 @@ func TestViewsRendering(t *testing.T) {
 
 		dev3 := wiz.NewDevice("192.168.1.102")
 		dev3.Name = "Studio Lamp"
+		dev3.Room = "Basement"
 		reg.AddOrUpdate(dev3)
 
-		populatedOutput := RenderDeviceList(reg, 0, true, 40, 20)
+		populatedOutput := RenderDeviceList(reg, 0, true, 60, 20)
 		if !strings.Contains(populatedOutput, "192.168.1.100") {
 			t.Errorf("expected IP in rendered device list output")
 		}
 		if !strings.Contains(populatedOutput, "Studio Lamp") {
 			t.Errorf("expected custom device name 'Studio Lamp' in rendered device list output")
+		}
+		if !strings.Contains(populatedOutput, "[Basement]") {
+			t.Errorf("expected room tag '[Basement]' in rendered device list output")
 		}
 	})
 
@@ -70,13 +74,14 @@ func TestViewsRendering(t *testing.T) {
 
 		dev := wiz.NewDevice("192.168.1.105")
 		dev.Name = "Reading Nook"
+		dev.Room = "Library"
 		dev.State = true
 		dev.Brightness = 75
 		dev.SceneID = 1 // Ocean scene
 
 		sceneOutput := RenderControlPanel(dev, true, 300, 40, 20)
-		if !strings.Contains(sceneOutput, "Reading Nook") || !strings.Contains(sceneOutput, "Ocean") || !strings.Contains(sceneOutput, "75%") {
-			t.Errorf("expected custom device alias 'Reading Nook', scene name, and brightness in control panel")
+		if !strings.Contains(sceneOutput, "Reading Nook") || !strings.Contains(sceneOutput, "Library") || !strings.Contains(sceneOutput, "Ocean") || !strings.Contains(sceneOutput, "75%") {
+			t.Errorf("expected custom device alias 'Reading Nook', room 'Library', scene name, and brightness in control panel")
 		}
 
 		dev.SceneID = 0

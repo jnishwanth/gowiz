@@ -20,6 +20,8 @@ type CommandActionResult struct {
 	PilotParams   *wiz.PilotParams
 	SetSleepTimer int    // sleep timer in seconds, if > 0
 	NewDeviceName string // custom device name to set on active device, if non-empty
+	SetDeviceRoom string // custom room name to set on active device ("CLEAR" to remove), if non-empty
+	TargetRoom    string // target room group name for batch room commands, if non-empty
 	TargetIP      string // target bulb IP to add/connect to
 }
 
@@ -373,6 +375,67 @@ func (r *CommandRegistry) registerDefaults() {
 			ShowRecent: true,
 		}
 	})
+
+	// Room Assignment & Group Batch Commands
+	roomHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			if activeDev != nil && activeDev.Room != "" {
+				return CommandActionResult{StatusMsg: fmt.Sprintf("Light [%s] assigned to room '%s'", activeDev.IP, activeDev.Room)}
+			}
+			return CommandActionResult{StatusMsg: "Usage: :room <room name> (or :room clear)"}
+		}
+		if len(args) == 1 && strings.EqualFold(args[0], "clear") {
+			if activeDev != nil {
+				return CommandActionResult{
+					SetDeviceRoom: "CLEAR",
+					StatusMsg:     fmt.Sprintf("Cleared room assignment for light [%s]", activeDev.IP),
+				}
+			}
+			return CommandActionResult{StatusMsg: "No active device to clear room."}
+		}
+		roomName := strings.Join(args, " ")
+		if activeDev != nil {
+			return CommandActionResult{
+				SetDeviceRoom: roomName,
+				StatusMsg:     fmt.Sprintf("Assigned light [%s] to room '%s'", activeDev.IP, roomName),
+			}
+		}
+		return CommandActionResult{StatusMsg: "No active device to assign room."}
+	}
+	r.Register("room", roomHandler)
+
+	groupHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{StatusMsg: "Usage: :group <room name> <action> (e.g. :group Living Room on)"}
+		}
+
+		subIdx := -1
+		for i := len(args) - 1; i >= 1; i-- {
+			verb := strings.ToLower(args[i])
+			if _, found := r.handlers[verb]; found {
+				subIdx = i
+				break
+			}
+		}
+
+		if subIdx != -1 {
+			roomName := strings.Join(args[:subIdx], " ")
+			subCmdStr := strings.Join(args[subIdx:], " ")
+			subRes := r.Execute(subCmdStr, activeDev)
+			subRes.TargetRoom = roomName
+			if subRes.PilotParams != nil {
+				subRes.StatusMsg = fmt.Sprintf("Group command '%s' sent to room '%s'", subCmdStr, roomName)
+			}
+			return subRes
+		}
+
+		roomName := strings.Join(args, " ")
+		return CommandActionResult{
+			TargetRoom: roomName,
+			StatusMsg:  fmt.Sprintf("Targeting group/room '%s'", roomName),
+		}
+	}
+	r.Register("group", groupHandler)
 
 	// Direct Scene Shortcut Verbs
 	sceneShortcuts := map[string]string{

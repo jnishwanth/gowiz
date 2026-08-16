@@ -10,6 +10,7 @@ import (
 // Config represents persistent user settings and custom bulb aliases.
 type Config struct {
 	DeviceAliases map[string]string `json:"device_aliases"`
+	DeviceRooms   map[string]string `json:"device_rooms,omitempty"`
 	LastActiveIP  string            `json:"last_active_ip,omitempty"`
 	RecentIPs     []string          `json:"recent_ips,omitempty"`
 	AutoScan      bool              `json:"auto_scan"`
@@ -26,6 +27,7 @@ type Manager struct {
 func DefaultConfig() Config {
 	return Config{
 		DeviceAliases: make(map[string]string),
+		DeviceRooms:   make(map[string]string),
 		RecentIPs:     make([]string, 0),
 		AutoScan:      true,
 	}
@@ -78,6 +80,9 @@ func (m *Manager) Load() error {
 	if cfg.DeviceAliases == nil {
 		cfg.DeviceAliases = make(map[string]string)
 	}
+	if cfg.DeviceRooms == nil {
+		cfg.DeviceRooms = make(map[string]string)
+	}
 	m.cfg = cfg
 	return nil
 }
@@ -110,11 +115,17 @@ func (m *Manager) GetConfig() Config {
 		aliasesCopy[k] = v
 	}
 
+	roomsCopy := make(map[string]string)
+	for k, v := range m.cfg.DeviceRooms {
+		roomsCopy[k] = v
+	}
+
 	recentCopy := make([]string, len(m.cfg.RecentIPs))
 	copy(recentCopy, m.cfg.RecentIPs)
 
 	return Config{
 		DeviceAliases: aliasesCopy,
+		DeviceRooms:   roomsCopy,
 		LastActiveIP:  m.cfg.LastActiveIP,
 		RecentIPs:     recentCopy,
 		AutoScan:      m.cfg.AutoScan,
@@ -200,4 +211,27 @@ func (m *Manager) GetRecentIPs() []string {
 	recentCopy := make([]string, len(m.cfg.RecentIPs))
 	copy(recentCopy, m.cfg.RecentIPs)
 	return recentCopy
+}
+
+// SetRoom assigns a room name to a bulb IP or MAC address and saves to disk.
+func (m *Manager) SetRoom(identifier, room string) error {
+	m.mu.Lock()
+	if m.cfg.DeviceRooms == nil {
+		m.cfg.DeviceRooms = make(map[string]string)
+	}
+	if room == "" {
+		delete(m.cfg.DeviceRooms, identifier)
+	} else {
+		m.cfg.DeviceRooms[identifier] = room
+	}
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// GetRoom retrieves the room name for a bulb identifier, if present.
+func (m *Manager) GetRoom(identifier string) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	room, found := m.cfg.DeviceRooms[identifier]
+	return room, found
 }

@@ -70,6 +70,9 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 			} else if dev.IsFallback && innerWidth > 22 {
 				displayLabel += " (FB)"
 			}
+			if dev.Room != "" && innerWidth > 20 {
+				displayLabel += fmt.Sprintf(" [%s]", dev.Room)
+			}
 
 			labelTruncated := lipgloss.NewStyle().MaxWidth(max(innerWidth-12, 8)).Render(displayLabel)
 			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, labelTruncated)

@@ -166,3 +166,40 @@ func TestConfigManagerRecentIPs(t *testing.T) {
 		t.Errorf("Expected reloaded 10 recent IPs, got %d", len(mgr2.GetRecentIPs()))
 	}
 }
+
+func TestConfigManagerDeviceRooms(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "rooms_test.json")
+
+	mgr := config.NewManager(cfgPath)
+
+	err := mgr.SetRoom("192.168.1.115", "Living Room")
+	if err != nil {
+		t.Fatalf("Failed to set room: %v", err)
+	}
+
+	room1, found1 := mgr.GetRoom("192.168.1.115")
+	if !found1 || room1 != "Living Room" {
+		t.Errorf("Expected 'Living Room', got '%s' (found: %v)", room1, found1)
+	}
+
+	// Verify persistence
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+
+	room2, found2 := mgr2.GetRoom("192.168.1.115")
+	if !found2 || room2 != "Living Room" {
+		t.Errorf("Expected reloaded room 'Living Room', got '%s'", room2)
+	}
+
+	// Remove room assignment
+	if err := mgr2.SetRoom("192.168.1.115", ""); err != nil {
+		t.Fatalf("Failed to clear room: %v", err)
+	}
+	_, found3 := mgr2.GetRoom("192.168.1.115")
+	if found3 {
+		t.Errorf("Expected room assignment to be deleted when passed empty string")
+	}
+}
