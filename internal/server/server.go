@@ -282,8 +282,8 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	s.broadcaster.Publish(Event{
-		Type:    EventDevicesDiscovered,
-		Status:  "ok",
+		Type:   EventDevicesDiscovered,
+		Status: "ok",
 		Payload: map[string]any{
 			"count":   len(discoveredIPs),
 			"devices": discoveredIPs,
@@ -292,7 +292,7 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":          "ok",
-		"timeoutSeconds": timeoutSec,
+		"timeoutSeconds":  timeoutSec,
 		"discoveredCount": len(discoveredIPs),
 		"devices":         discoveredIPs,
 	})
@@ -923,7 +923,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 				"post": map[string]any{
-					"summary": "Trigger local network broadcast discovery scan",
+					"summary":   "Trigger local network broadcast discovery scan",
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},
