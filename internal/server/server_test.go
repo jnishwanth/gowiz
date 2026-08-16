@@ -1105,3 +1105,101 @@ func TestServerDiscover(t *testing.T) {
 		}
 	})
 }
+
+func TestServerScenes(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET /api/v1/scenes - all scenes and categories", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/scenes")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/scenes: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		if data["status"] != "success" {
+			t.Errorf("expected status 'success', got %v", data["status"])
+		}
+
+		cats, ok := data["categories"].([]any)
+		if !ok || len(cats) == 0 {
+			t.Errorf("expected non-empty categories list, got %v", data["categories"])
+		}
+
+		scenes, ok := data["scenes"].([]any)
+		if !ok || len(scenes) == 0 {
+			t.Errorf("expected non-empty scenes list, got %v", data["scenes"])
+		}
+
+		count, ok := data["count"].(float64)
+		if !ok || count != float64(len(scenes)) {
+			t.Errorf("expected count %d, got %v", len(scenes), data["count"])
+		}
+	})
+
+	t.Run("GET /api/v1/scenes with category filter", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/scenes?category=Nature")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/scenes?category=Nature: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		scenes, ok := data["scenes"].([]any)
+		if !ok || len(scenes) == 0 {
+			t.Errorf("expected matching scenes for category Nature, got %v", data["scenes"])
+		}
+	})
+
+	t.Run("GET /api/v1/scenes with search query filter", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/scenes?q=ocean")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/scenes?q=ocean: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		scenes, ok := data["scenes"].([]any)
+		if !ok || len(scenes) == 0 {
+			t.Errorf("expected matching scenes for query ocean, got %v", data["scenes"])
+		}
+	})
+
+	t.Run("POST /api/v1/scenes - method not allowed", func(t *testing.T) {
+		resp, err := http.Post(ts.URL+"/api/v1/scenes", "application/json", nil)
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/scenes: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+		}
+	})
+}

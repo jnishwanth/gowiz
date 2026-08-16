@@ -125,6 +125,7 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/api/v1/pilot", s.wrapFunc(s.handlePilot, true))
 	mux.Handle("/api/v1/effects", s.wrapFunc(s.handleEffects, true))
 	mux.Handle("/api/v1/presets", s.wrapFunc(s.handlePresets, true))
+	mux.Handle("/api/v1/scenes", s.wrapFunc(s.handleScenes, true))
 	mux.Handle("/api/v1/circadian", s.wrapFunc(s.handleCircadian, true))
 	mux.Handle("/api/v1/command", s.wrapFunc(s.handleCommand, true))
 	mux.Handle("/events", s.wrap(s.broadcaster, true))
@@ -295,6 +296,38 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 		"timeoutSeconds":  timeoutSec,
 		"discoveredCount": len(discoveredIPs),
 		"devices":         discoveredIPs,
+	})
+}
+
+func (s *Server) handleScenes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	catQuery := strings.TrimSpace(r.URL.Query().Get("category"))
+	if catQuery == "" {
+		catQuery = strings.TrimSpace(r.URL.Query().Get("cat"))
+	}
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
+	if searchQuery == "" {
+		searchQuery = strings.TrimSpace(r.URL.Query().Get("q"))
+	}
+
+	var scenes []wiz.Scene
+	if catQuery != "" {
+		scenes = wiz.FilterScenesByCategory(catQuery)
+	} else if searchQuery != "" {
+		scenes = wiz.FilterScenes(searchQuery)
+	} else {
+		scenes = wiz.AllScenes
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":     "success",
+		"categories": wiz.GetSceneCategories(),
+		"count":      len(scenes),
+		"scenes":     scenes,
 	})
 }
 
@@ -1121,6 +1154,16 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},
+			"/api/v1/scenes": map[string]any{
+				"get": map[string]any{
+					"summary": "Get dynamic scenes and categories with optional filtering",
+					"parameters": []map[string]any{
+						{"name": "category", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Filter scenes by category name (e.g. Nature, Cozy, White)"},
+						{"name": "search", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Filter scenes by search term"},
+					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
 			"/api/v1/circadian": map[string]any{
 				"get": map[string]any{
 					"summary":   "Calculate circadian rhythm settings for a time and optional room",
@@ -1204,6 +1247,11 @@ a:hover { text-decoration: underline; }
   <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/presets</span>
   <p>GET lists available lighting presets. POST applies preset to target IP or room.</p>
   <pre>{"name": "evening", "room": "Living Room"}</pre>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/api/v1/scenes</span>
+  <p>List dynamic scenes and categories with optional category (<code>?category=Nature</code>) or search (<code>?q=ocean</code>) filtering.</p>
 </div>
 
 <div class="card">
