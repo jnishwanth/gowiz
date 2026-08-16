@@ -75,6 +75,10 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
 	mux.HandleFunc("/api/v1/devices", s.handleDevices)
+	mux.HandleFunc("/api/v1/rooms", s.handleRooms)
+	mux.HandleFunc("/api/v1/openapi.json", s.handleOpenAPI)
+	mux.HandleFunc("/docs", s.handleDocs)
+	mux.HandleFunc("/api/v1/docs", s.handleDocs)
 	mux.HandleFunc("/api/v1/pilot", s.handlePilot)
 	mux.HandleFunc("/api/v1/presets", s.handlePresets)
 	mux.HandleFunc("/api/v1/circadian", s.handleCircadian)
@@ -143,16 +147,16 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	subscribers, webhookSent, webhookFailed := s.broadcaster.Stats()
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":             "ok",
-		"service":            "gowiz-api",
-		"version":            "1.0.0",
-		"uptimeSeconds":      time.Since(s.startTime).Seconds(),
-		"deviceCount":        len(s.cfg.DevRegistry.List()),
-		"recentCount":        recentCount,
-		"presetsCount":       presetsCount,
-		"configPath":         cfgPath,
-		"sseSubscribers":     subscribers,
-		"webhookURL":         s.broadcaster.WebhookURL(),
+		"status":              "ok",
+		"service":             "gowiz-api",
+		"version":             "1.0.0",
+		"uptimeSeconds":       time.Since(s.startTime).Seconds(),
+		"deviceCount":         len(s.cfg.DevRegistry.List()),
+		"recentCount":         recentCount,
+		"presetsCount":        presetsCount,
+		"configPath":          cfgPath,
+		"sseSubscribers":      subscribers,
+		"webhookURL":          s.broadcaster.WebhookURL(),
 		"webhookEventsSent":   webhookSent,
 		"webhookEventsFailed": webhookFailed,
 	})
@@ -532,3 +536,217 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleRooms(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	roomName := strings.TrimSpace(r.URL.Query().Get("name"))
+	if roomName != "" {
+		devices := s.cfg.DevRegistry.GetDevicesByRoom(roomName)
+		if len(devices) == 0 {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("room '%s' not found or contains no devices", roomName))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"room":    roomName,
+			"devices": devices,
+		})
+		return
+	}
+
+	roomsMap := make(map[string][]*wiz.Device)
+	for _, dev := range s.cfg.DevRegistry.List() {
+		rName := dev.Room
+		if rName == "" {
+			rName = "unassigned"
+		}
+		roomsMap[rName] = append(roomsMap[rName], dev)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"rooms":  roomsMap,
+	})
+}
+
+func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	spec := map[string]any{
+		"openapi": "3.0.3",
+		"info": map[string]any{
+			"title":       "gowiz REST API",
+			"description": "Zero-dependency HTTP REST API server for gowiz WiZ smart light control",
+			"version":     "1.0.0",
+		},
+		"paths": map[string]any{
+			"/health": map[string]any{
+				"get": map[string]any{
+					"summary":   "Service health and metrics",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/devices": map[string]any{
+				"get": map[string]any{
+					"summary": "Get all devices or query device by IP",
+					"parameters": []map[string]any{
+						{"name": "ip", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Optional bulb IP address"},
+					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/rooms": map[string]any{
+				"get": map[string]any{
+					"summary": "Get all rooms and assigned devices",
+					"parameters": []map[string]any{
+						{"name": "name", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Optional room name filter"},
+					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/pilot": map[string]any{
+				"post": map[string]any{
+					"summary": "Send Pilot control parameters to device or room",
+					"requestBody": map[string]any{
+						"required": true,
+						"content": map[string]any{
+							"application/json": map[string]any{
+								"schema": map[string]any{
+									"type": "object",
+									"properties": map[string]any{
+										"ip":      map[string]any{"type": "string"},
+										"room":    map[string]any{"type": "string"},
+										"state":   map[string]any{"type": "boolean"},
+										"dimming": map[string]any{"type": "integer"},
+										"temp":    map[string]any{"type": "integer"},
+										"r":       map[string]any{"type": "integer"},
+										"g":       map[string]any{"type": "integer"},
+										"b":       map[string]any{"type": "integer"},
+										"sceneId": map[string]any{"type": "integer"},
+										"speed":   map[string]any{"type": "integer"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/presets": map[string]any{
+				"get": map[string]any{
+					"summary":   "List available lighting presets",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+				"post": map[string]any{
+					"summary":   "Apply lighting preset to IP or room",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/circadian": map[string]any{
+				"get": map[string]any{
+					"summary":   "Calculate circadian rhythm settings for a time and optional room",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/command": map[string]any{
+				"post": map[string]any{
+					"summary":   "Execute arbitrary gowiz command string",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/events": map[string]any{
+				"get": map[string]any{
+					"summary":   "Server-Sent Events (SSE) live streaming endpoint",
+					"responses": map[string]any{"200": map[string]any{"description": "Event Stream"}},
+				},
+			},
+		},
+	}
+	writeJSON(w, http.StatusOK, spec)
+}
+
+func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	html := `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gowiz API Documentation</title>
+<style>
+body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; }
+h1 { color: #38bdf8; margin-bottom: 0.5rem; }
+p { color: #94a3b8; }
+.card { background: #1e293b; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #334155; }
+.method { font-weight: bold; padding: 0.25rem 0.5rem; border-radius: 4px; display: inline-block; margin-right: 0.5rem; font-size: 0.85rem; }
+.get { background: #0284c7; color: white; }
+.post { background: #16a34a; color: white; }
+.endpoint { font-family: monospace; font-size: 1.1rem; color: #e2e8f0; }
+pre { background: #0f172a; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #38bdf8; font-size: 0.9rem; }
+a { color: #38bdf8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h1>gowiz HTTP REST API</h1>
+<p>Interactive endpoint documentation and live integration reference. <a href="/api/v1/openapi.json" target="_blank">OpenAPI 3.0 JSON Spec</a></p>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/health</span>
+  <p>Returns server health status, device counts, uptime, and webhook metrics.</p>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/api/v1/devices</span>
+  <p>List all registered WiZ light devices or query specific device via <code>?ip=&lt;address&gt;</code>.</p>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/api/v1/rooms</span>
+  <p>List all room groupings and devices, or filter by room via <code>?name=&lt;room&gt;</code>.</p>
+</div>
+
+<div class="card">
+  <span class="method post">POST</span><span class="endpoint">/api/v1/pilot</span>
+  <p>Send pilot state controls to a bulb IP or room target.</p>
+  <pre>{"ip": "192.168.1.50", "state": true, "dimming": 80, "temp": 3000}</pre>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/presets</span>
+  <p>GET lists available lighting presets. POST applies preset to target IP or room.</p>
+  <pre>{"name": "evening", "room": "Living Room"}</pre>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/api/v1/circadian</span>
+  <p>Calculate circadian rhythm phase for a target time (<code>?time=14:30</code>) and optional room.</p>
+</div>
+
+<div class="card">
+  <span class="method post">POST</span><span class="endpoint">/api/v1/command</span>
+  <p>Execute arbitrary gowiz command string (e.g., "sunset", "warm", "group Bedroom off").</p>
+  <pre>{"command": "ocean", "room": "Living Room"}</pre>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/api/v1/events</span>
+  <p>Server-Sent Events (SSE) live event streaming channel for real-time bulb updates.</p>
+</div>
+</body>
+</html>`
+	_, _ = w.Write([]byte(html))
+}

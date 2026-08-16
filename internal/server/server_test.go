@@ -500,3 +500,114 @@ func TestServerEventsSSE(t *testing.T) {
 	}
 }
 
+func TestServerRooms(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET all rooms", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/rooms")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/rooms: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+		if data["status"] != "ok" {
+			t.Errorf("expected status 'ok', got %v", data["status"])
+		}
+		rooms, ok := data["rooms"].(map[string]any)
+		if !ok || len(rooms) == 0 {
+			t.Errorf("expected non-empty rooms map, got %v", data["rooms"])
+		}
+	})
+
+	t.Run("GET specific room by name", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/rooms?name=Living%20Room")
+		if err != nil {
+			t.Fatalf("failed GET room by name: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode JSON: %v", err)
+		}
+		if data["room"] != "Living Room" {
+			t.Errorf("expected room 'Living Room', got %v", data["room"])
+		}
+	})
+
+	t.Run("GET non-existent room", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/rooms?name=UnknownRoom")
+		if err != nil {
+			t.Fatalf("failed GET non-existent room: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected status 404 Not Found, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestServerOpenAPI(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/v1/openapi.json")
+	if err != nil {
+		t.Fatalf("failed GET /api/v1/openapi.json: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var spec map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&spec); err != nil {
+		t.Fatalf("failed to decode OpenAPI JSON: %v", err)
+	}
+	if spec["openapi"] != "3.0.3" {
+		t.Errorf("expected openapi 3.0.3, got %v", spec["openapi"])
+	}
+	paths, ok := spec["paths"].(map[string]any)
+	if !ok || len(paths) == 0 {
+		t.Errorf("expected non-empty paths map in OpenAPI spec, got %v", spec["paths"])
+	}
+}
+
+func TestServerDocs(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	endpoints := []string{"/docs", "/api/v1/docs"}
+	for _, ep := range endpoints {
+		resp, err := http.Get(ts.URL + ep)
+		if err != nil {
+			t.Fatalf("failed GET %s: %v", ep, err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200 for %s, got %d", ep, resp.StatusCode)
+		}
+		if !bytes.Contains([]byte(resp.Header.Get("Content-Type")), []byte("text/html")) {
+			t.Errorf("expected Content-Type text/html for %s, got %s", ep, resp.Header.Get("Content-Type"))
+		}
+	}
+}
