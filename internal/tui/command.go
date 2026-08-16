@@ -43,6 +43,7 @@ type CommandActionResult struct {
 	ExportPath       string // destination path for exporting config
 	ImportPath       string // source path for importing config
 	CompletionShell  string // target shell for generating autocompletion script
+	RunDaemon        bool   // request running background circadian daemon
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -890,4 +891,14 @@ func (r *CommandRegistry) registerDefaults() {
 	}
 	r.Register("circadian", circadianHandler)
 	r.Register("rhythm", circadianHandler)
+
+	// Daemon Scheduler Handler
+	daemonHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{
+			RunDaemon: true,
+			StatusMsg: "Starting background circadian daemon schedule sync...",
+		}
+	}
+	r.Register("daemon", daemonHandler)
+	r.Register("schedule", daemonHandler)
 }

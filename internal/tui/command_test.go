@@ -401,4 +401,15 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected FadeLabel '🌅 Bedroom Winddown' via group circadian, got %q", resGroupCirc.FadeLabel)
 		}
 	})
+
+	t.Run("Daemon and schedule command dispatch", func(t *testing.T) {
+		resDaemon := ExecuteCommand("daemon", dev)
+		if !resDaemon.RunDaemon {
+			t.Errorf("expected RunDaemon true for :daemon command")
+		}
+		resSchedule := ExecuteCommand("schedule", dev)
+		if !resSchedule.RunDaemon {
+			t.Errorf("expected RunDaemon true for :schedule command")
+		}
+	})
 }

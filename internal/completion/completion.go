@@ -32,8 +32,8 @@ _gowiz_completions() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="--ip --cmd --config --json --mock --version -v --help --check"
-    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm cat category categories info diag status config recent export import undo help scan quit completion"
+    opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval"
+    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule cat category categories info diag status config recent export import undo help scan quit completion"
     presets="evening movie night focus work relax party list save delete"
     categories="nature cozy white party mood dynamic"
     shells="bash zsh fish"
@@ -88,6 +88,7 @@ _gowiz() {
         'sunrise:Start sunrise lighting simulation'
         'sunset:Start sunset lighting simulation'
         'circadian:Apply 24-hour circadian lighting rhythm'
+        'daemon:Run background circadian schedule sync daemon'
         'cat:Filter scenes by category'
         'info:Display device telemetry diagnostics'
         'config:Display configuration status'
@@ -103,6 +104,9 @@ _gowiz() {
         '--config[Path to configuration JSON]:file:_files'
         '--json[Output results in JSON format]'
         '--mock[Run in mock hardware mode]'
+        '--daemon[Run in background circadian sync daemon mode]'
+        '--once[Run a single circadian sync pass]'
+        '--interval[Sync interval duration in daemon mode]:duration:'
         '--version[Print version information]'
         '-v[Print version information]'
         '--help[Show help message]'
@@ -148,6 +152,9 @@ complete -c gowiz -l cmd -d "Command string to execute" -r
 complete -c gowiz -l config -d "Path to configuration JSON" -r
 complete -c gowiz -l json -d "Output results in JSON format"
 complete -c gowiz -l mock -d "Run in mock hardware mode"
+complete -c gowiz -l daemon -d "Run in background circadian sync daemon mode"
+complete -c gowiz -l once -d "Run a single circadian sync pass"
+complete -c gowiz -l interval -d "Sync interval duration" -r
 
 # Commands
 complete -c gowiz -n "__fish_use_subcommand" -a on -d "Turn smart light on"
@@ -162,6 +169,7 @@ complete -c gowiz -n "__fish_use_subcommand" -a room -d "Assign device to room"
 complete -c gowiz -n "__fish_use_subcommand" -a group -d "Execute batch command on room group"
 complete -c gowiz -n "__fish_use_subcommand" -a fade -d "Start linear dimming fade transition"
 complete -c gowiz -n "__fish_use_subcommand" -a circadian -d "Apply 24-hour circadian lighting rhythm"
+complete -c gowiz -n "__fish_use_subcommand" -a daemon -d "Run background circadian schedule sync daemon"
 complete -c gowiz -n "__fish_use_subcommand" -a cat -d "Filter scenes by category"
 complete -c gowiz -n "__fish_use_subcommand" -a info -d "Display device telemetry diagnostics"
 complete -c gowiz -n "__fish_use_subcommand" -a config -d "Display current configuration"

@@ -473,4 +473,25 @@ func TestCLIRun(t *testing.T) {
 			t.Errorf("expected fish completion script output, got: %s", buf.String())
 		}
 	})
+
+	t.Run("Daemon mode execution", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Daemon:     true,
+			DaemonOnce: true,
+			Writer:     &buf,
+		}
+
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected daemon run error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Starting circadian schedule daemon") {
+			t.Errorf("expected daemon startup log message, got: %s", buf.String())
+		}
+	})
 }

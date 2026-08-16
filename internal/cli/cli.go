@@ -8,21 +8,26 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"wiz-tui/internal/completion"
 	"wiz-tui/internal/config"
+	"wiz-tui/internal/daemon"
 	"wiz-tui/internal/tui"
 	"wiz-tui/internal/wiz"
 )
 
 // Options specifies runtime settings for non-interactive CLI execution.
 type Options struct {
-	ConfigPath string
-	TargetIP   string
-	Mock       bool
-	Command    string
-	JSONOutput bool
-	Writer     io.Writer
+	ConfigPath     string
+	TargetIP       string
+	Mock           bool
+	Command        string
+	JSONOutput     bool
+	Daemon         bool
+	DaemonOnce     bool
+	DaemonInterval time.Duration
+	Writer         io.Writer
 }
 
 func printJSON(w io.Writer, data any) error {
@@ -47,6 +52,16 @@ func Run(ctx context.Context, opts Options) error {
 		client = wiz.NewMockClient()
 	} else {
 		client = wiz.NewUDPClient()
+	}
+
+	if opts.Daemon {
+		d := daemon.NewDaemon(cfgMgr, client, daemon.DaemonOptions{
+			Interval: opts.DaemonInterval,
+			Once:     opts.DaemonOnce,
+			Verbose:  !opts.JSONOutput,
+			Writer:   w,
+		})
+		return d.Run(ctx)
 	}
 
 	reg := wiz.NewDeviceRegistry()

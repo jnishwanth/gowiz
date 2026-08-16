@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"wiz-tui/internal/cli"
@@ -24,6 +25,9 @@ func main() {
 	jsonFlag := flag.Bool("json", false, "Output results in JSON format in CLI mode")
 	versionFlag := flag.Bool("version", false, "Print version information and exit")
 	flag.BoolVar(versionFlag, "v", false, "Print version information and exit")
+	daemonFlag := flag.Bool("daemon", false, "Run in background daemon mode for circadian schedule sync")
+	onceFlag := flag.Bool("once", false, "Run a single circadian sync pass and exit")
+	intervalFlag := flag.Duration("interval", 1*time.Minute, "Sync interval duration in daemon mode (e.g., 1m, 5m, 30s)")
 
 	flag.Parse()
 
@@ -46,6 +50,23 @@ func main() {
 		for _, arg := range args[1:] {
 			cmdStr += " " + arg
 		}
+	}
+
+	if *daemonFlag || cmdStr == "daemon" || cmdStr == "schedule" {
+		opts := cli.Options{
+			ConfigPath:     *configFlag,
+			TargetIP:       *ipFlag,
+			Mock:           *mockFlag,
+			JSONOutput:     *jsonFlag,
+			Daemon:         true,
+			DaemonOnce:     *onceFlag,
+			DaemonInterval: *intervalFlag,
+		}
+		if err := cli.Run(context.Background(), opts); err != nil {
+			fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 
 	// Non-interactive CLI execution mode
