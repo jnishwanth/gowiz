@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -495,123 +494,43 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		parts := strings.Fields(cmdStr)
-		verb := strings.ToLower(parts[0])
+		activeDev, _ := m.Registry.GetActive()
+		res := ExecuteCommand(cmdStr, activeDev)
 
-		switch verb {
-		case "q", "quit", "exit":
+		if res.Quit {
 			return m, tea.Quit
-
-		case "h", "help":
+		}
+		if res.Help {
 			m.mode = ModeHelp
 			return m, nil
-
-		case "on":
-			m.setStatusMessage("Turning on lights...")
-			return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
-
-		case "off":
-			m.setStatusMessage("Turning off lights...")
-			return m, m.dispatchPilotCmd(wiz.NewPowerParams(false))
-
-		case "power":
-			if len(parts) > 1 {
-				arg := strings.ToLower(parts[1])
-				if arg == "on" || arg == "true" || arg == "1" {
-					return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
-				} else if arg == "off" || arg == "false" || arg == "0" {
-					return m, m.dispatchPilotCmd(wiz.NewPowerParams(false))
-				}
-			}
-			active, ok := m.Registry.GetActive()
-			if ok {
-				return m, m.dispatchPilotCmd(wiz.NewPowerParams(!active.State))
-			}
-			return m, m.dispatchPilotCmd(wiz.NewPowerParams(true))
-
-		case "scan":
+		}
+		if res.Scan {
 			m.setStatusMessage("Scanning network...")
 			return m, m.scanNetworkCmd()
-
-		case "scene":
-			if len(parts) > 1 {
-				arg := strings.Join(parts[1:], " ")
-				if id, err := strconv.Atoi(arg); err == nil {
-					scene := wiz.GetSceneByID(id)
-					m.setStatusMessage(fmt.Sprintf("Scene set: %s", scene.Name))
-					return m, m.dispatchPilotCmd(wiz.NewSceneParams(id))
-				} else if scene, found := wiz.GetSceneByName(arg); found {
-					m.setStatusMessage(fmt.Sprintf("Scene set: %s", scene.Name))
-					return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
-				} else {
-					m.setStatusMessage(fmt.Sprintf("Unknown scene: %s", arg))
-				}
-			}
-
-		case "dim":
-			if len(parts) > 1 {
-				if dim, err := strconv.Atoi(parts[1]); err == nil {
-					m.setStatusMessage(fmt.Sprintf("Brightness set: %d%%", dim))
-					return m, m.dispatchPilotCmd(wiz.NewDimmingParams(dim))
-				}
-			}
-
-		case "temp":
-			if len(parts) > 1 {
-				if temp, err := strconv.Atoi(parts[1]); err == nil {
-					m.setStatusMessage(fmt.Sprintf("Color temp set: %dK", temp))
-					return m, m.dispatchPilotCmd(wiz.NewTempParams(temp))
-				}
-			}
-
-		case "rgb":
-			if len(parts) >= 4 {
-				r, _ := strconv.Atoi(parts[1])
-				g, _ := strconv.Atoi(parts[2])
-				b, _ := strconv.Atoi(parts[3])
-				m.setStatusMessage(fmt.Sprintf("RGB color set: R:%d G:%d B:%d", r, g, b))
-				return m, m.dispatchPilotCmd(wiz.NewRGBParams(r, g, b))
-			}
-
-		case "timer":
-			if len(parts) > 1 {
-				if mins, err := strconv.Atoi(parts[1]); err == nil {
-					m.sleepTimerSecs = mins * 60
-					m.setStatusMessage(fmt.Sprintf("Sleep timer set: %d minutes.", mins))
-				}
-			}
-
-		case "speed":
-			if len(parts) > 1 {
-				if sp, err := strconv.Atoi(parts[1]); err == nil {
-					active, ok := m.Registry.GetActive()
-					if ok && active.SceneID > 0 {
-						spClamped := clamp(sp, 20, 200)
-						m.setStatusMessage(fmt.Sprintf("Scene speed set: %d%%", spClamped))
-						return m, m.dispatchPilotCmd(wiz.NewSceneParams(active.SceneID, spClamped))
-					} else {
-						m.setStatusMessage("Speed requires an active dynamic scene.")
-					}
-				}
-			}
-
-		case "u", "undo":
-			active, ok := m.Registry.GetActive()
-			if ok {
-				stack := m.undoStack[active.IP]
+		}
+		if res.SetSleepTimer > 0 {
+			m.sleepTimerSecs = res.SetSleepTimer
+		}
+		if res.Undo {
+			if activeDev != nil {
+				stack := m.undoStack[activeDev.IP]
 				if len(stack) > 0 {
 					lastState := stack[len(stack)-1]
-					m.undoStack[active.IP] = stack[:len(stack)-1]
+					m.undoStack[activeDev.IP] = stack[:len(stack)-1]
 					m.setStatusMessage("Undid previous state change.")
 					return m, m.dispatchPilotCmd(lastState)
 				}
 				m.setStatusMessage("Nothing to undo.")
 			}
-
-		default:
-			m.setStatusMessage(fmt.Sprintf("Unknown command: :%s", cmdStr))
+			return m, nil
 		}
 
+		if res.StatusMsg != "" {
+			m.setStatusMessage(res.StatusMsg)
+		}
+		if res.PilotParams != nil {
+			return m, m.dispatchPilotCmd(*res.PilotParams)
+		}
 		return m, nil
 
 	case "backspace":

@@ -667,6 +667,44 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected active target IP %s after Home, got %s", expectedFirstIP, activeDev.IP)
 		}
 
+		// Test :hex #ffaa00 command in model
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "hex #ffaa00" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.RGB != [3]int{255, 170, 0} {
+			t.Errorf("expected RGB [255,170,0] after :hex #ffaa00, got %v", dev.RGB)
+		}
+
+		// Test :warm preset command in model
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "warm" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.Temp != 2700 {
+			t.Errorf("expected temp 2700 after :warm, got %d", dev.Temp)
+		}
+
 		// Test clampDeviceCursor
 		m.deviceCursor = 99
 		m.clampDeviceCursor()
