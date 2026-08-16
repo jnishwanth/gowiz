@@ -317,13 +317,15 @@ func (r *CommandRegistry) registerDefaults() {
 		return CommandActionResult{PilotParams: &params}
 	})
 
-	// Scan
-	r.Register("scan", func(args []string, activeDev *wiz.Device) CommandActionResult {
+	// Scan & Discover
+	scanHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
 		return CommandActionResult{
 			Scan:      true,
 			StatusMsg: "Scanning network...",
 		}
-	})
+	}
+	r.Register("scan", scanHandler)
+	r.Register("discover", scanHandler)
 
 	// Scene
 	r.Register("scene", func(args []string, activeDev *wiz.Device) CommandActionResult {

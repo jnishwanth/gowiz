@@ -15,11 +15,12 @@ import (
 type EventType string
 
 const (
-	EventDeviceUpdated   EventType = "device_updated"
-	EventCommandExecuted EventType = "command_executed"
-	EventPresetApplied   EventType = "preset_applied"
-	EventCircadianTick   EventType = "circadian_tick"
-	EventWebhookTest     EventType = "webhook_test"
+	EventDeviceUpdated     EventType = "device_updated"
+	EventCommandExecuted   EventType = "command_executed"
+	EventPresetApplied     EventType = "preset_applied"
+	EventCircadianTick     EventType = "circadian_tick"
+	EventWebhookTest       EventType = "webhook_test"
+	EventDevicesDiscovered EventType = "devices_discovered"
 )
 
 // Event defines the structured payload broadcast to SSE subscribers and webhooks.

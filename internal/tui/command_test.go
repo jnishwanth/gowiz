@@ -473,4 +473,16 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected ListGroups true for :group list")
 		}
 	})
+
+	t.Run("Scan and Discover commands", func(t *testing.T) {
+		resScan := ExecuteCommand("scan", dev)
+		if !resScan.Scan {
+			t.Errorf("expected Scan true for :scan command")
+		}
+
+		resDiscover := ExecuteCommand("discover", dev)
+		if !resDiscover.Scan {
+			t.Errorf("expected Scan true for :discover command")
+		}
+	})
 }

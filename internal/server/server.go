@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -114,6 +115,7 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/health", s.wrapFunc(s.handleHealth, false))
 	mux.Handle("/api/v1/health", s.wrapFunc(s.handleHealth, false))
 	mux.Handle("/api/v1/devices", s.wrapFunc(s.handleDevices, true))
+	mux.Handle("/api/v1/discover", s.wrapFunc(s.handleDiscover, true))
 	mux.Handle("/api/v1/rooms", s.wrapFunc(s.handleRooms, true))
 	mux.Handle("/api/v1/groups", s.wrapFunc(s.handleGroups, true))
 	mux.Handle("/api/v1/groups/", s.wrapFunc(s.handleGroupDetail, true))
@@ -227,6 +229,72 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
 		"devices": s.cfg.DevRegistry.List(),
+	})
+}
+
+func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	timeoutSec := 1.0
+	if tStr := r.URL.Query().Get("timeout"); tStr != "" {
+		if sec, err := strconv.ParseFloat(tStr, 64); err == nil && sec > 0 {
+			timeoutSec = sec
+		} else if dur, err := time.ParseDuration(tStr); err == nil && dur > 0 {
+			timeoutSec = dur.Seconds()
+		}
+	} else if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" && r.Body != nil {
+		var body struct {
+			TimeoutSeconds float64 `json:"timeoutSeconds"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.TimeoutSeconds > 0 {
+			timeoutSec = body.TimeoutSeconds
+		}
+	}
+
+	if timeoutSec < 0.1 {
+		timeoutSec = 0.1
+	} else if timeoutSec > 10.0 {
+		timeoutSec = 10.0
+	}
+
+	timeoutDur := time.Duration(timeoutSec * float64(time.Second))
+	discoveredIPs, err := wiz.DiscoverSmartBulbs(r.Context(), timeoutDur)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("discovery failed: %v", err))
+		return
+	}
+
+	s.mu.Lock()
+	for _, ip := range discoveredIPs {
+		if ip != "" && ip != wiz.FallbackIP {
+			s.cfg.DevRegistry.AddOrUpdate(wiz.NewDevice(ip))
+			if s.cfg.ConfigMgr != nil {
+				_ = s.cfg.ConfigMgr.AddRecentIP(ip)
+			}
+		}
+	}
+	if s.cfg.ConfigMgr != nil {
+		s.cfg.DevRegistry.ApplyAliases(s.cfg.ConfigMgr.GetConfig().DeviceAliases)
+	}
+	s.mu.Unlock()
+
+	s.broadcaster.Publish(Event{
+		Type:    EventDevicesDiscovered,
+		Status:  "ok",
+		Payload: map[string]any{
+			"count":   len(discoveredIPs),
+			"devices": discoveredIPs,
+		},
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":          "ok",
+		"timeoutSeconds": timeoutSec,
+		"discoveredCount": len(discoveredIPs),
+		"devices":         discoveredIPs,
 	})
 }
 
@@ -843,6 +911,19 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"parameters": []map[string]any{
 						{"name": "ip", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Optional bulb IP address"},
 					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/discover": map[string]any{
+				"get": map[string]any{
+					"summary": "Scan local network broadcast for WiZ smart lights",
+					"parameters": []map[string]any{
+						{"name": "timeout", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Optional scan timeout in seconds or duration (e.g. 1.5, 2s)"},
+					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+				"post": map[string]any{
+					"summary": "Trigger local network broadcast discovery scan",
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},

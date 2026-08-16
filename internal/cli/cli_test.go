@@ -635,4 +635,34 @@ func TestCLIRun(t *testing.T) {
 			t.Errorf("expected deleted group message, got: %s", buf.String())
 		}
 	})
+
+	t.Run("Discovery_and_scan_command_execution", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Command:    "discover",
+			Writer:     &buf,
+		}
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected discovery error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Discovered") {
+			t.Errorf("expected discovery output, got: %s", buf.String())
+		}
+
+		buf.Reset()
+		opts.JSONOutput = true
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected discovery JSON error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"status": "ok"`) || !strings.Contains(buf.String(), `"discovered_count"`) {
+			t.Errorf("expected discovery JSON output, got: %s", buf.String())
+		}
+	})
 }

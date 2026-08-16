@@ -859,3 +859,70 @@ func TestServerGroups(t *testing.T) {
 		}
 	})
 }
+
+func TestServerDiscover(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET /api/v1/discover", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/discover?timeout=0.1s")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/discover: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		if res["status"] != "ok" {
+			t.Errorf("expected status 'ok', got %v", res["status"])
+		}
+		if res["discoveredCount"] == nil {
+			t.Errorf("expected discoveredCount field in response")
+		}
+	})
+
+	t.Run("POST /api/v1/discover with JSON payload", func(t *testing.T) {
+		payload := map[string]any{
+			"timeoutSeconds": 0.1,
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		resp, err := http.Post(ts.URL+"/api/v1/discover", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/discover: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+		if res["status"] != "ok" {
+			t.Errorf("expected status 'ok', got %v", res["status"])
+		}
+	})
+
+	t.Run("Method Not Allowed for DELETE /api/v1/discover", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/discover", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed DELETE /api/v1/discover: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+		}
+	})
+}

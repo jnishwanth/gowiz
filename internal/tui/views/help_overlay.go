@@ -87,7 +87,7 @@ func RenderHelpOverlay(width, height int) string {
 				{":toggle", "Toggle power state on active/selected lights"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
 				{":u / :undo", "Undo previous state change"},
-				{":scan", "Rescan subnet for WiZ devices"},
+				{":scan / :discover", "Rescan subnet for WiZ devices"},
 				{":completion <sh>", "Generate shell autocompletion (bash, zsh, fish)"},
 				{"/ <query>", "Instant search / filter dynamic scenes"},
 				{":q / q", "Quit gowiz"},

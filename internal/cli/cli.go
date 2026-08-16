@@ -245,6 +245,37 @@ func Run(ctx context.Context, opts Options) error {
 		return nil
 	}
 
+	// Handle network discovery scan
+	if result.Scan {
+		timeout := 1000 * time.Millisecond
+		ips, err := wiz.DiscoverSmartBulbs(ctx, timeout)
+		if err != nil {
+			return fmt.Errorf("network discovery failed: %w", err)
+		}
+		for _, ip := range ips {
+			if ip != "" && ip != wiz.FallbackIP {
+				_ = cfgMgr.AddRecentIP(ip)
+			}
+		}
+		if opts.JSONOutput {
+			type ScanJSON struct {
+				Status          string   `json:"status"`
+				DiscoveredCount int      `json:"discovered_count"`
+				Devices         []string `json:"devices"`
+			}
+			return printJSON(w, ScanJSON{
+				Status:          "ok",
+				DiscoveredCount: len(ips),
+				Devices:         ips,
+			})
+		}
+		fmt.Fprintf(w, "Discovered %d WiZ device(s) on network:\n", len(ips))
+		for _, ip := range ips {
+			fmt.Fprintf(w, "  - %s\n", ip)
+		}
+		return nil
+	}
+
 	// Handle completion script generation
 	if result.CompletionShell != "" {
 		script, err := completion.Generate(result.CompletionShell)
