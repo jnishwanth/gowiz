@@ -127,6 +127,40 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("IP target command dispatches", func(t *testing.T) {
+		resValid := ExecuteCommand("ip 192.168.1.200", dev)
+		if resValid.TargetIP != "192.168.1.200" {
+			t.Errorf("expected TargetIP '192.168.1.200', got '%s'", resValid.TargetIP)
+		}
+
+		resConnect := ExecuteCommand("connect 10.0.0.15", dev)
+		if resConnect.TargetIP != "10.0.0.15" {
+			t.Errorf("expected TargetIP '10.0.0.15' via :connect, got '%s'", resConnect.TargetIP)
+		}
+
+		resAdd := ExecuteCommand("add 172.16.0.4", dev)
+		if resAdd.TargetIP != "172.16.0.4" {
+			t.Errorf("expected TargetIP '172.16.0.4' via :add, got '%s'", resAdd.TargetIP)
+		}
+
+		resInvalid := ExecuteCommand("ip not.an.ip.addr", dev)
+		if resInvalid.TargetIP != "" {
+			t.Errorf("expected empty TargetIP for invalid IP address, got '%s'", resInvalid.TargetIP)
+		}
+
+		resEmpty := ExecuteCommand("ip", dev)
+		if resEmpty.StatusMsg != "Usage: :ip <ip address>" {
+			t.Errorf("expected usage message for empty :ip args, got '%s'", resEmpty.StatusMsg)
+		}
+	})
+
+	t.Run("Recent target command dispatch", func(t *testing.T) {
+		res := ExecuteCommand("recent", dev)
+		if !res.ShowRecent {
+			t.Errorf("expected ShowRecent true for :recent command")
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {

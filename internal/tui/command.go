@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"wiz-tui/internal/wiz"
@@ -14,10 +15,12 @@ type CommandActionResult struct {
 	Scan          bool
 	Undo          bool
 	ConfigInfo    bool
+	ShowRecent    bool
 	StatusMsg     string
 	PilotParams   *wiz.PilotParams
 	SetSleepTimer int    // sleep timer in seconds, if > 0
 	NewDeviceName string // custom device name to set on active device, if non-empty
+	TargetIP      string // target bulb IP to add/connect to
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -343,6 +346,31 @@ func (r *CommandRegistry) registerDefaults() {
 		return CommandActionResult{
 			ConfigInfo: true,
 			StatusMsg:  "Querying configuration location and saved aliases...",
+		}
+	})
+
+	// IP Target / Connect Verbs
+	ipHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{StatusMsg: "Usage: :ip <ip address>"}
+		}
+		ipStr := strings.TrimSpace(args[0])
+		if net.ParseIP(ipStr) == nil {
+			return CommandActionResult{StatusMsg: fmt.Sprintf("Invalid IP address: %s", ipStr)}
+		}
+		return CommandActionResult{
+			TargetIP:  ipStr,
+			StatusMsg: fmt.Sprintf("Connecting to WiZ bulb at %s...", ipStr),
+		}
+	}
+	r.Register("ip", ipHandler)
+	r.Register("connect", ipHandler)
+	r.Register("add", ipHandler)
+
+	// Recent Targets Verb
+	r.Register("recent", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{
+			ShowRecent: true,
 		}
 	})
 

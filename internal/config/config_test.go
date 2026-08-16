@@ -127,3 +127,42 @@ func TestConfigManagerLastActiveIP(t *testing.T) {
 		t.Errorf("Expected reloaded LastActiveIP '192.168.1.88', got '%s'", mgr2.GetLastActiveIP())
 	}
 }
+
+func TestConfigManagerRecentIPs(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "recent_ips_test.json")
+
+	mgr := config.NewManager(cfgPath)
+
+	// Add initial IPs
+	_ = mgr.AddRecentIP("192.168.1.10")
+	_ = mgr.AddRecentIP("192.168.1.20")
+	_ = mgr.AddRecentIP("192.168.1.10") // Duplicate should move to front
+
+	recents := mgr.GetRecentIPs()
+	if len(recents) != 2 {
+		t.Fatalf("Expected 2 recent IPs, got %d", len(recents))
+	}
+	if recents[0] != "192.168.1.10" || recents[1] != "192.168.1.20" {
+		t.Errorf("Unexpected recent IPs order: %v", recents)
+	}
+
+	// Add more than 10 unique IPs to verify limit capping
+	for i := 1; i <= 15; i++ {
+		_ = mgr.AddRecentIP(filepath.Join("10.0.0.", string(rune('0'+i))))
+	}
+
+	recentsCapped := mgr.GetRecentIPs()
+	if len(recentsCapped) != 10 {
+		t.Errorf("Expected capped 10 recent IPs, got %d", len(recentsCapped))
+	}
+
+	// Verify persistence
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+	if len(mgr2.GetRecentIPs()) != 10 {
+		t.Errorf("Expected reloaded 10 recent IPs, got %d", len(mgr2.GetRecentIPs()))
+	}
+}

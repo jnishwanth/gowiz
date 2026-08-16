@@ -11,6 +11,7 @@ import (
 type Config struct {
 	DeviceAliases map[string]string `json:"device_aliases"`
 	LastActiveIP  string            `json:"last_active_ip,omitempty"`
+	RecentIPs     []string          `json:"recent_ips,omitempty"`
 	AutoScan      bool              `json:"auto_scan"`
 }
 
@@ -25,6 +26,7 @@ type Manager struct {
 func DefaultConfig() Config {
 	return Config{
 		DeviceAliases: make(map[string]string),
+		RecentIPs:     make([]string, 0),
 		AutoScan:      true,
 	}
 }
@@ -108,9 +110,13 @@ func (m *Manager) GetConfig() Config {
 		aliasesCopy[k] = v
 	}
 
+	recentCopy := make([]string, len(m.cfg.RecentIPs))
+	copy(recentCopy, m.cfg.RecentIPs)
+
 	return Config{
 		DeviceAliases: aliasesCopy,
 		LastActiveIP:  m.cfg.LastActiveIP,
+		RecentIPs:     recentCopy,
 		AutoScan:      m.cfg.AutoScan,
 	}
 }
@@ -162,4 +168,36 @@ func (m *Manager) GetLastActiveIP() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cfg.LastActiveIP
+}
+
+// AddRecentIP adds an IP to the recent targets list (deduplicating and capping at 10) and sets LastActiveIP.
+func (m *Manager) AddRecentIP(ip string) error {
+	if ip == "" {
+		return nil
+	}
+	m.mu.Lock()
+	m.cfg.LastActiveIP = ip
+
+	newList := []string{ip}
+	for _, existing := range m.cfg.RecentIPs {
+		if existing != ip {
+			newList = append(newList, existing)
+		}
+	}
+	if len(newList) > 10 {
+		newList = newList[:10]
+	}
+	m.cfg.RecentIPs = newList
+	m.mu.Unlock()
+
+	return m.Save()
+}
+
+// GetRecentIPs retrieves a copy of the recent bulb target IP history.
+func (m *Manager) GetRecentIPs() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	recentCopy := make([]string, len(m.cfg.RecentIPs))
+	copy(recentCopy, m.cfg.RecentIPs)
+	return recentCopy
 }

@@ -802,4 +802,41 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected auto-restored active IP '192.168.1.199', got %v", autoActiveDev)
 		}
 	})
+
+	t.Run("IP target command and recent targets in Model", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "model_ip_target_test.json")
+
+		mockClient := wiz.NewMockClient()
+		m := NewModelWithConfig(mockClient, "192.168.1.100", cfgPath)
+
+		// Execute :ip 192.168.1.222 command
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "ip 192.168.1.222" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		activeDev, ok := m.Registry.GetActive()
+		if !ok || activeDev.IP != "192.168.1.222" {
+			t.Fatalf("expected active IP '192.168.1.222', got %v", activeDev)
+		}
+
+		// Execute :recent command
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "recent" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		if !strings.Contains(m.statusMessage, "Recent targets") || !strings.Contains(m.statusMessage, "192.168.1.222") {
+			t.Errorf("expected status message showing recent target 192.168.1.222, got %q", m.statusMessage)
+		}
+	})
 }

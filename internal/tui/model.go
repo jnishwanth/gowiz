@@ -41,6 +41,12 @@ func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) 
 	reg := wiz.NewDeviceRegistry()
 	reg.ApplyAliases(cfg.DeviceAliases)
 
+	for _, recIP := range cfg.RecentIPs {
+		if recIP != "" && recIP != wiz.FallbackIP {
+			reg.AddOrUpdate(wiz.NewDevice(recIP))
+		}
+	}
+
 	targetIP := initialIP
 	if targetIP == "" || targetIP == wiz.FallbackIP {
 		if cfg.LastActiveIP != "" {
@@ -567,6 +573,34 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if res.ShowRecent {
+			if m.configManager != nil {
+				recents := m.configManager.GetRecentIPs()
+				if len(recents) == 0 {
+					m.setStatusMessage("No recent IP targets saved.")
+				} else {
+					m.setStatusMessage(fmt.Sprintf("Recent targets (%d): %s", len(recents), strings.Join(recents, ", ")))
+				}
+			} else {
+				m.setStatusMessage("No configuration manager attached.")
+			}
+			return m, nil
+		}
+
+		if res.TargetIP != "" {
+			m.Registry.AddOrUpdate(wiz.NewDevice(res.TargetIP))
+			m.setActiveDevice(res.TargetIP)
+			devices := m.Registry.List()
+			for i, dev := range devices {
+				if dev.IP == res.TargetIP {
+					m.deviceCursor = i
+					break
+				}
+			}
+			m.setStatusMessage(fmt.Sprintf("Target bulb set to %s", res.TargetIP))
+			return m, m.pollTelemetryCmd()
+		}
+
 		if res.NewDeviceName != "" && activeDev != nil {
 			m.Registry.SetName(activeDev.IP, res.NewDeviceName)
 			if m.configManager != nil {
@@ -728,7 +762,7 @@ func (m *Model) setStatusMessage(msg string) {
 func (m *Model) setActiveDevice(ip string) {
 	if m.Registry.SetActive(ip) {
 		if m.configManager != nil {
-			_ = m.configManager.SetLastActiveIP(ip)
+			_ = m.configManager.AddRecentIP(ip)
 		}
 	}
 }
