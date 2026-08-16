@@ -306,20 +306,125 @@ func TestServerCircadian(t *testing.T) {
 	ts := httptest.NewServer(srv.Router())
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/v1/circadian?time=14:30&room=Living%20Room")
-	if err != nil {
-		t.Fatalf("failed GET /api/v1/circadian: %v", err)
-	}
-	defer resp.Body.Close()
+	t.Run("GET /api/v1/circadian calculation", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/circadian?time=14:30&room=Living%20Room")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/circadian: %v", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
 
-	var data map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		t.Fatalf("failed to decode response JSON: %v", err)
-	}
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+		if data["status"] != "ok" || data["time"] != "14:30" {
+			t.Errorf("unexpected GET circadian response: %+v", data)
+		}
+	})
+
+	t.Run("POST /api/v1/circadian to single IP", func(t *testing.T) {
+		body, _ := json.Marshal(CircadianRequest{
+			IP:   "192.168.1.50",
+			Time: "08:00",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/circadian", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/circadian to IP: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode POST response: %v", err)
+		}
+		if res["status"] != "ok" || res["targetIP"] != "192.168.1.50" {
+			t.Errorf("unexpected POST single IP response: %+v", res)
+		}
+	})
+
+	t.Run("POST /api/v1/circadian to room group", func(t *testing.T) {
+		body, _ := json.Marshal(CircadianRequest{
+			Room: "Living Room",
+			Time: "12:00",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/circadian", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/circadian to room: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode room response: %v", err)
+		}
+		if res["status"] != "ok" || res["target"] != "Living Room" {
+			t.Errorf("unexpected POST room response: %+v", res)
+		}
+	})
+
+	t.Run("POST /api/v1/circadian broadcast all", func(t *testing.T) {
+		body, _ := json.Marshal(CircadianRequest{
+			All:  true,
+			Time: "22:00",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/circadian", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/circadian broadcast: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode broadcast response: %v", err)
+		}
+		if res["status"] != "ok" || res["target"] != "all" {
+			t.Errorf("unexpected POST broadcast response: %+v", res)
+		}
+	})
+
+	t.Run("POST /api/v1/circadian unknown room", func(t *testing.T) {
+		body, _ := json.Marshal(CircadianRequest{
+			Room: "NonExistentRoom",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/circadian", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/circadian: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected status 404 Not Found, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("DELETE /api/v1/circadian method not allowed", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/circadian", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed DELETE /api/v1/circadian: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+		}
+	})
 }
 
 func TestServerCommand(t *testing.T) {
@@ -395,8 +500,9 @@ func TestServerMethodNotAllowed(t *testing.T) {
 	ts := httptest.NewServer(srv.Router())
 	defer ts.Close()
 
-	endpoints := []string{"/api/v1/devices", "/api/v1/circadian"}
-	for _, ep := range endpoints {
+	// Endpoints that do not support POST
+	postEndpoints := []string{"/api/v1/devices"}
+	for _, ep := range postEndpoints {
 		resp, err := http.Post(ts.URL+ep, "application/json", bytes.NewReader([]byte("{}")))
 		if err != nil {
 			t.Fatalf("failed POST %s: %v", ep, err)
@@ -404,6 +510,20 @@ func TestServerMethodNotAllowed(t *testing.T) {
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusMethodNotAllowed {
 			t.Errorf("expected 405 for POST %s, got %d", ep, resp.StatusCode)
+		}
+	}
+
+	// Endpoints that do not support DELETE
+	deleteEndpoints := []string{"/api/v1/devices", "/api/v1/circadian"}
+	for _, ep := range deleteEndpoints {
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+ep, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed DELETE %s: %v", ep, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405 for DELETE %s, got %d", ep, resp.StatusCode)
 		}
 	}
 }

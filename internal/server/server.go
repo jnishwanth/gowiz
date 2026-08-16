@@ -739,51 +739,187 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 }
 
+// CircadianRequest defines the JSON payload for dispatching circadian rhythm settings via HTTP POST /api/v1/circadian.
+type CircadianRequest struct {
+	IP     string `json:"ip,omitempty"`
+	Room   string `json:"room,omitempty"`
+	Group  string `json:"group,omitempty"`
+	Target string `json:"target,omitempty"`
+	All    bool   `json:"all,omitempty"`
+	Time   string `json:"time,omitempty"`
+}
+
 func (s *Server) handleCircadian(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r.Method == http.MethodGet {
+		targetTime := time.Now()
+		timeArg := r.URL.Query().Get("time")
+		if timeArg != "" {
+			t, err := circadian.ParseTimeArg(timeArg)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid time format: %v", err))
+				return
+			}
+			targetTime = t
+		}
+
+		room := r.URL.Query().Get("room")
+		var globalPhases []circadian.SchedulePhase
+		var roomPhases map[string][]circadian.SchedulePhase
+		if s.cfg.ConfigMgr != nil {
+			c := s.cfg.ConfigMgr.GetConfig()
+			globalPhases = c.CircadianPhases
+			roomPhases = c.RoomCircadianPhases
+		}
+
+		phases := globalPhases
+		if room != "" && roomPhases != nil {
+			if rp, found := roomPhases[strings.ToLower(strings.TrimSpace(room))]; found && len(rp) > 0 {
+				phases = rp
+			}
+		}
+
+		info := circadian.CalculateWithPhases(targetTime, phases)
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "ok",
+			"room":   room,
+			"time":   targetTime.Format("15:04"),
+			"phase":  info.Phase,
+			"info":   info.Status,
+			"params": info.Params,
+		})
 		return
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
-	targetTime := time.Now()
-	timeArg := r.URL.Query().Get("time")
-	if timeArg != "" {
-		t, err := circadian.ParseTimeArg(timeArg)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid time format: %v", err))
+	if r.Method == http.MethodPost {
+		var req CircadianRequest
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+
+		targetTime := time.Now()
+		if req.Time != "" {
+			t, err := circadian.ParseTimeArg(req.Time)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid time format: %v", err))
+				return
+			}
+			targetTime = t
+		}
+
+		targetGroup := req.Group
+		if targetGroup == "" {
+			targetGroup = req.Room
+		}
+		if targetGroup == "" {
+			targetGroup = req.Target
+		}
+		if req.All && targetGroup == "" {
+			targetGroup = "all"
+		}
+
+		var globalPhases []circadian.SchedulePhase
+		var roomPhases map[string][]circadian.SchedulePhase
+		if s.cfg.ConfigMgr != nil {
+			c := s.cfg.ConfigMgr.GetConfig()
+			globalPhases = c.CircadianPhases
+			roomPhases = c.RoomCircadianPhases
+		}
+
+		phases := globalPhases
+		if targetGroup != "" && roomPhases != nil {
+			if rp, found := roomPhases[strings.ToLower(strings.TrimSpace(targetGroup))]; found && len(rp) > 0 {
+				phases = rp
+			}
+		}
+
+		info := circadian.CalculateWithPhases(targetTime, phases)
+		ctx := r.Context()
+
+		if targetGroup != "" {
+			targets := s.cfg.DevRegistry.GetDevicesBySelector(targetGroup, s.getGroups())
+			if len(targets) == 0 {
+				writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target '%s'", targetGroup))
+				return
+			}
+			ips := make([]string, len(targets))
+			for i, dev := range targets {
+				ips[i] = dev.IP
+			}
+			errs := s.cfg.WizClient.SendBatchCommand(ctx, ips, info.Params)
+			failed := 0
+			for _, err := range errs {
+				if err != nil {
+					failed++
+				}
+			}
+			if failed > 0 {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send circadian settings to %d/%d devices in group/room '%s'", failed, len(ips), targetGroup))
+				return
+			}
+
+			s.broadcaster.Publish(Event{
+				Type:    EventDeviceUpdated,
+				Room:    targetGroup,
+				Status:  "ok",
+				Payload: info.Params,
+			})
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"status":       "ok",
+				"target":       targetGroup,
+				"devicesCount": len(ips),
+				"time":         targetTime.Format("15:04"),
+				"phase":        info.Phase,
+				"info":         info.Status,
+				"params":       info.Params,
+			})
 			return
 		}
-		targetTime = t
-	}
 
-	room := r.URL.Query().Get("room")
-	var globalPhases []circadian.SchedulePhase
-	var roomPhases map[string][]circadian.SchedulePhase
-	if s.cfg.ConfigMgr != nil {
-		c := s.cfg.ConfigMgr.GetConfig()
-		globalPhases = c.CircadianPhases
-		roomPhases = c.RoomCircadianPhases
-	}
-
-	phases := globalPhases
-	if room != "" && roomPhases != nil {
-		if rp, found := roomPhases[strings.ToLower(strings.TrimSpace(room))]; found && len(rp) > 0 {
-			phases = rp
+		targetIP := req.IP
+		if targetIP == "" {
+			if activeDev, found := s.cfg.DevRegistry.GetActive(); found {
+				targetIP = activeDev.IP
+			}
 		}
+		if targetIP == "" {
+			writeError(w, http.StatusBadRequest, "no target IP specified or active device available")
+			return
+		}
+
+		if err := s.cfg.WizClient.SendCommand(ctx, targetIP, info.Params); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send circadian settings to %s: %v", targetIP, err))
+			return
+		}
+
+		if s.cfg.ConfigMgr != nil {
+			_ = s.cfg.ConfigMgr.SetLastActiveIP(targetIP)
+			_ = s.cfg.ConfigMgr.AddRecentIP(targetIP)
+		}
+
+		s.broadcaster.Publish(Event{
+			Type:    EventDeviceUpdated,
+			IP:      targetIP,
+			Status:  "ok",
+			Payload: info.Params,
+		})
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":   "ok",
+			"targetIP": targetIP,
+			"time":     targetTime.Format("15:04"),
+			"phase":    info.Phase,
+			"info":     info.Status,
+			"params":   info.Params,
+		})
+		return
 	}
 
-	info := circadian.CalculateWithPhases(targetTime, phases)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"room":   room,
-		"time":   targetTime.Format("15:04"),
-		"phase":  info.Phase,
-		"info":   info.Status,
-		"params": info.Params,
-	})
+	writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 }
 
 func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
@@ -990,6 +1126,10 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"summary":   "Calculate circadian rhythm settings for a time and optional room",
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
+				"post": map[string]any{
+					"summary":   "Apply calculated circadian rhythm settings to target IP, room, custom group, or broadcast all",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
 			},
 			"/api/v1/command": map[string]any{
 				"post": map[string]any{
@@ -1067,8 +1207,9 @@ a:hover { text-decoration: underline; }
 </div>
 
 <div class="card">
-  <span class="method get">GET</span><span class="endpoint">/api/v1/circadian</span>
-  <p>Calculate circadian rhythm phase for a target time (<code>?time=14:30</code>) and optional room.</p>
+  <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/circadian</span>
+  <p>GET calculates circadian rhythm phase for target time (<code>?time=14:30</code>) and optional room. POST applies circadian settings to bulb IP, room, group, or broadcast all.</p>
+  <pre>{"room": "Living Room", "time": "21:00"}</pre>
 </div>
 
 <div class="card">
