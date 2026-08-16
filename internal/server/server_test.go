@@ -1291,6 +1291,88 @@ func TestServerScenes(t *testing.T) {
 	})
 }
 
+func TestServerCategories(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET /api/v1/categories - all category summaries", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/categories")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/categories: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		if data["status"] != "success" {
+			t.Errorf("expected status 'success', got %v", data["status"])
+		}
+
+		cats, ok := data["categories"].([]any)
+		if !ok || len(cats) == 0 {
+			t.Fatalf("expected non-empty categories summary list, got %v", data["categories"])
+		}
+	})
+
+	t.Run("GET /api/v1/categories?name=Nature - category detail", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/categories?name=Nature")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/categories?name=Nature: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode response JSON: %v", err)
+		}
+
+		if data["status"] != "success" {
+			t.Errorf("expected status 'success', got %v", data["status"])
+		}
+
+		scenes, ok := data["scenes"].([]any)
+		if !ok || len(scenes) == 0 {
+			t.Errorf("expected scenes for category Nature, got %v", data["scenes"])
+		}
+	})
+
+	t.Run("GET /api/v1/categories?name=NonExistent - 404", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/categories?name=NonExistent")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/categories?name=NonExistent: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected status 404 Not Found, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("POST /api/v1/categories - 405 method not allowed", func(t *testing.T) {
+		resp, err := http.Post(ts.URL+"/api/v1/categories", "application/json", nil)
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/categories: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+		}
+	})
+}
+
 func TestServerConfig(t *testing.T) {
 	srv, reg := setupTestServer(t)
 	ts := httptest.NewServer(srv.Router())

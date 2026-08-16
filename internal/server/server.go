@@ -126,6 +126,7 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/api/v1/effects", s.wrapFunc(s.handleEffects, true))
 	mux.Handle("/api/v1/presets", s.wrapFunc(s.handlePresets, true))
 	mux.Handle("/api/v1/scenes", s.wrapFunc(s.handleScenes, true))
+	mux.Handle("/api/v1/categories", s.wrapFunc(s.handleCategories, true))
 	mux.Handle("/api/v1/circadian", s.wrapFunc(s.handleCircadian, true))
 	mux.Handle("/api/v1/command", s.wrapFunc(s.handleCommand, true))
 	mux.Handle("/api/v1/config", s.wrapFunc(s.handleConfig, true))
@@ -329,6 +330,42 @@ func (s *Server) handleScenes(w http.ResponseWriter, r *http.Request) {
 		"categories": wiz.GetSceneCategories(),
 		"count":      len(scenes),
 		"scenes":     scenes,
+	})
+}
+
+func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	catQuery := strings.TrimSpace(r.URL.Query().Get("name"))
+	if catQuery == "" {
+		catQuery = strings.TrimSpace(r.URL.Query().Get("cat"))
+	}
+	if catQuery == "" {
+		catQuery = strings.TrimSpace(r.URL.Query().Get("category"))
+	}
+
+	if catQuery != "" {
+		matched := wiz.FilterScenesByCategory(catQuery)
+		if len(matched) == 0 {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("category '%s' not found", catQuery))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":   "success",
+			"category": catQuery,
+			"count":    len(matched),
+			"scenes":   matched,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":     "success",
+		"count":      len(wiz.GetSceneCategories()),
+		"categories": wiz.GetCategorySummaries(),
 	})
 }
 
@@ -1319,6 +1356,15 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},
+			"/api/v1/categories": map[string]any{
+				"get": map[string]any{
+					"summary": "Get scene category summaries or query scenes by category name",
+					"parameters": []map[string]any{
+						{"name": "name", "in": "query", "schema": map[string]any{"type": "string"}, "description": "Optional category name filter (e.g. Nature, Cozy, White)"},
+					},
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
 			"/api/v1/circadian": map[string]any{
 				"get": map[string]any{
 					"summary":   "Calculate circadian rhythm settings for a time and optional room",
@@ -1429,6 +1475,11 @@ a:hover { text-decoration: underline; }
 <div class="card">
   <span class="method get">GET</span><span class="endpoint">/api/v1/scenes</span>
   <p>List dynamic scenes and categories with optional category (<code>?category=Nature</code>) or search (<code>?q=ocean</code>) filtering.</p>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="endpoint">/api/v1/categories</span>
+  <p>List scene category summaries with scene counts and metadata, or query category scenes (<code>?name=Nature</code>).</p>
 </div>
 
 <div class="card">

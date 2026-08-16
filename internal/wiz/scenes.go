@@ -131,3 +131,34 @@ func FilterScenesByCategory(category string) []Scene {
 	}
 	return matched
 }
+
+// CategorySummary provides structured metadata for a scene category.
+type CategorySummary struct {
+	Category   string   `json:"category"`
+	Count      int      `json:"count"`
+	SceneIDs   []int    `json:"sceneIds"`
+	SceneNames []string `json:"sceneNames"`
+}
+
+// GetCategorySummaries returns a list of category summaries with scene counts and scene metadata.
+func GetCategorySummaries() []CategorySummary {
+	categories := GetSceneCategories()
+	summaries := make([]CategorySummary, 0, len(categories))
+	for _, cat := range categories {
+		scenes := FilterScenesByCategory(cat)
+		ids := make([]int, 0, len(scenes))
+		names := make([]string, 0, len(scenes))
+		for _, sc := range scenes {
+			ids = append(ids, sc.ID)
+			names = append(names, sc.Name)
+		}
+		summaries = append(summaries, CategorySummary{
+			Category:   cat,
+			Count:      len(scenes),
+			SceneIDs:   ids,
+			SceneNames: names,
+		})
+	}
+	return summaries
+}
+
