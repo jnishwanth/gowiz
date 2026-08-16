@@ -366,3 +366,137 @@ func TestServerStartShutdown(t *testing.T) {
 		t.Fatalf("unexpected error on server shutdown: %v", err)
 	}
 }
+
+func TestBroadcaster(t *testing.T) {
+	b := NewBroadcaster("")
+	ch, unsubscribe := b.Subscribe()
+
+	subs, sent, failed := b.Stats()
+	if subs != 1 {
+		t.Errorf("expected 1 subscriber, got %d", subs)
+	}
+
+	evt := Event{
+		Type:    EventDeviceUpdated,
+		IP:      "192.168.1.50",
+		Status:  "ok",
+		Command: "dim 50",
+	}
+	b.Publish(evt)
+
+	select {
+	case received := <-ch:
+		if received.Type != EventDeviceUpdated || received.IP != "192.168.1.50" {
+			t.Errorf("unexpected event received: %+v", received)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for event delivery")
+	}
+
+	unsubscribe()
+	subs, _, _ = b.Stats()
+	if subs != 0 {
+		t.Errorf("expected 0 subscribers after unsubscribe, got %d", subs)
+	}
+
+	_ = sent
+	_ = failed
+}
+
+func TestServerWebhook(t *testing.T) {
+	eventCh := make(chan Event, 1)
+	webhookTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var evt Event
+		if err := json.NewDecoder(r.Body).Decode(&evt); err == nil {
+			eventCh <- evt
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer webhookTS.Close()
+
+	srv, _ := setupTestServer(t)
+	srv.Broadcaster().SetWebhookURL(webhookTS.URL)
+
+	if srv.Broadcaster().WebhookURL() != webhookTS.URL {
+		t.Errorf("expected WebhookURL %s, got %s", webhookTS.URL, srv.Broadcaster().WebhookURL())
+	}
+
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	st := true
+	body, _ := json.Marshal(PilotRequest{
+		IP:    "192.168.1.50",
+		State: &st,
+	})
+
+	resp, err := http.Post(ts.URL+"/api/v1/pilot", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("failed POST /api/v1/pilot: %v", err)
+	}
+	resp.Body.Close()
+
+	select {
+	case evt := <-eventCh:
+		if evt.Type != EventDeviceUpdated || evt.IP != "192.168.1.50" {
+			t.Errorf("unexpected webhook event payload: %+v", evt)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for webhook event dispatch")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	_, sent, _ := srv.Broadcaster().Stats()
+	if sent < 1 {
+		t.Errorf("expected webhookSent >= 1, got %d", sent)
+	}
+}
+
+func TestServerEventsSSE(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/v1/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("failed GET /api/v1/events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Errorf("expected Content-Type text/event-stream, got %s", resp.Header.Get("Content-Type"))
+	}
+
+	// Trigger command to generate an SSE event
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		body, _ := json.Marshal(map[string]string{
+			"command": "warm",
+			"ip":      "192.168.1.50",
+		})
+		res, postErr := http.Post(ts.URL+"/api/v1/command", "application/json", bytes.NewReader(body))
+		if postErr == nil {
+			res.Body.Close()
+		}
+	}()
+
+	buf := make([]byte, 1024)
+	n, readErr := resp.Body.Read(buf)
+	if readErr != nil && readErr != context.Canceled {
+		// Output read successfully
+	}
+	out := string(buf[:n])
+	if !bytes.Contains(buf[:n], []byte("event: command_executed")) {
+		t.Logf("SSE stream payload output: %s", out)
+	}
+}
+

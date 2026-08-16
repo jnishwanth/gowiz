@@ -31,6 +31,7 @@ func main() {
 	serverFlag := flag.Bool("server", false, "Run in HTTP REST API server mode")
 	flag.BoolVar(serverFlag, "s", false, "Run in HTTP REST API server mode")
 	portFlag := flag.Int("port", 8080, "Port for HTTP REST API server mode (default: 8080)")
+	webhookFlag := flag.String("webhook", "", "Target webhook URL for HTTP REST API server event dispatches")
 
 	flag.Parse()
 
@@ -80,6 +81,7 @@ func main() {
 			JSONOutput: *jsonFlag,
 			Server:     true,
 			ServerPort: *portFlag,
+			WebhookURL: *webhookFlag,
 		}
 		if err := cli.Run(context.Background(), opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
@@ -96,6 +98,7 @@ func main() {
 			Mock:       *mockFlag,
 			Command:    cmdStr,
 			JSONOutput: *jsonFlag,
+			WebhookURL: *webhookFlag,
 		}
 		if err := cli.Run(context.Background(), opts); err != nil {
 			if *jsonFlag {

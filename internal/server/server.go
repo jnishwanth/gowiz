@@ -19,6 +19,7 @@ import (
 type Config struct {
 	Port        int
 	Host        string
+	WebhookURL  string
 	WizClient   wiz.Client
 	ConfigMgr   *config.Manager
 	DevRegistry *wiz.DeviceRegistry
@@ -27,10 +28,11 @@ type Config struct {
 
 // Server implements a lightweight, zero-dependency HTTP REST API server for gowiz.
 type Server struct {
-	cfg        Config
-	httpServer *http.Server
-	startTime  time.Time
-	mu         sync.RWMutex
+	cfg         Config
+	httpServer  *http.Server
+	broadcaster *Broadcaster
+	startTime   time.Time
+	mu          sync.RWMutex
 }
 
 // NewServer initializes a new Server with defaults.
@@ -51,9 +53,15 @@ func NewServer(cfg Config) *Server {
 		cfg.CommandReg = tui.NewCommandRegistry()
 	}
 	return &Server{
-		cfg:       cfg,
-		startTime: time.Now(),
+		cfg:         cfg,
+		broadcaster: NewBroadcaster(cfg.WebhookURL),
+		startTime:   time.Now(),
 	}
+}
+
+// Broadcaster returns the server's Broadcaster instance.
+func (s *Server) Broadcaster() *Broadcaster {
+	return s.broadcaster
 }
 
 // ListenAddr returns the host:port server address.
@@ -71,6 +79,8 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("/api/v1/presets", s.handlePresets)
 	mux.HandleFunc("/api/v1/circadian", s.handleCircadian)
 	mux.HandleFunc("/api/v1/command", s.handleCommand)
+	mux.Handle("/events", s.broadcaster)
+	mux.Handle("/api/v1/events", s.broadcaster)
 	return mux
 }
 
@@ -130,15 +140,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		presetsCount = len(c.Presets)
 	}
 
+	subscribers, webhookSent, webhookFailed := s.broadcaster.Stats()
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":        "ok",
-		"service":       "gowiz-api",
-		"version":       "1.0.0",
-		"uptimeSeconds": time.Since(s.startTime).Seconds(),
-		"deviceCount":   len(s.cfg.DevRegistry.List()),
-		"recentCount":   recentCount,
-		"presetsCount":  presetsCount,
-		"configPath":    cfgPath,
+		"status":             "ok",
+		"service":            "gowiz-api",
+		"version":            "1.0.0",
+		"uptimeSeconds":      time.Since(s.startTime).Seconds(),
+		"deviceCount":        len(s.cfg.DevRegistry.List()),
+		"recentCount":        recentCount,
+		"presetsCount":       presetsCount,
+		"configPath":         cfgPath,
+		"sseSubscribers":     subscribers,
+		"webhookURL":         s.broadcaster.WebhookURL(),
+		"webhookEventsSent":   webhookSent,
+		"webhookEventsFailed": webhookFailed,
 	})
 }
 
@@ -229,6 +245,14 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send pilot to %d/%d devices in room '%s'", failed, len(ips), req.Room))
 			return
 		}
+
+		s.broadcaster.Publish(Event{
+			Type:    EventDeviceUpdated,
+			Room:    req.Room,
+			Status:  "ok",
+			Payload: params,
+		})
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":       "ok",
 			"room":         req.Room,
@@ -257,6 +281,13 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 		_ = s.cfg.ConfigMgr.SetLastActiveIP(targetIP)
 		_ = s.cfg.ConfigMgr.AddRecentIP(targetIP)
 	}
+
+	s.broadcaster.Publish(Event{
+		Type:    EventDeviceUpdated,
+		IP:      targetIP,
+		Status:  "ok",
+		Payload: params,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":   "ok",
@@ -329,6 +360,15 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 				ips[i] = dev.IP
 			}
 			_ = s.cfg.WizClient.SendBatchCommand(ctx, ips, params)
+
+			s.broadcaster.Publish(Event{
+				Type:    EventPresetApplied,
+				Room:    req.Room,
+				Command: req.Name,
+				Status:  "ok",
+				Payload: params,
+			})
+
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":       "ok",
 				"preset":       req.Name,
@@ -353,6 +393,14 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to apply preset to %s: %v", targetIP, err))
 			return
 		}
+
+		s.broadcaster.Publish(Event{
+			Type:    EventPresetApplied,
+			IP:      targetIP,
+			Command: req.Name,
+			Status:  "ok",
+			Payload: params,
+		})
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":   "ok",
@@ -467,6 +515,15 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		_ = s.cfg.WizClient.SendCommand(ctx, activeDev.IP, *res.PilotParams)
 	}
 
+	s.broadcaster.Publish(Event{
+		Type:    EventCommandExecuted,
+		IP:      req.IP,
+		Room:    res.TargetRoom,
+		Command: cmdStr,
+		Status:  "ok",
+		Payload: res,
+	})
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":    "ok",
 		"command":   cmdStr,
@@ -474,3 +531,4 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		"result":    res,
 	})
 }
+

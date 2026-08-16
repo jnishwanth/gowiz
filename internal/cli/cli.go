@@ -31,6 +31,7 @@ type Options struct {
 	DaemonInterval time.Duration
 	Server         bool
 	ServerPort     int
+	WebhookURL     string
 	Writer         io.Writer
 }
 
@@ -74,9 +75,10 @@ func Run(ctx context.Context, opts Options) error {
 			port = 8080
 		}
 		srv := server.NewServer(server.Config{
-			Port:      port,
-			WizClient: client,
-			ConfigMgr: cfgMgr,
+			Port:       port,
+			WebhookURL: opts.WebhookURL,
+			WizClient:  client,
+			ConfigMgr:  cfgMgr,
 		})
 		if !opts.JSONOutput {
 			fmt.Fprintf(w, "Starting gowiz HTTP REST API server on %s...\n", srv.ListenAddr())
@@ -136,6 +138,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		srv := server.NewServer(server.Config{
 			Port:        port,
+			WebhookURL:  opts.WebhookURL,
 			WizClient:   client,
 			ConfigMgr:   cfgMgr,
 			DevRegistry: reg,
