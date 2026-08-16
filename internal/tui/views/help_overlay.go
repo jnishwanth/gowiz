@@ -74,6 +74,7 @@ func RenderHelpOverlay(width, height int) string {
 				{":sunrise / :sunset", "Simulate sunrise / sunset light transitions"},
 				{":circadian [room] [t]", "24-hr circadian rhythm (:circadian 14:30 / :circadian room Bedroom)"},
 				{":daemon / :schedule", "Run background circadian schedule sync daemon"},
+				{":service <action>", "Manage systemd / launchd daemon service (:service install/uninstall)"},
 				{":toggle", "Toggle power state on active/selected lights"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
 				{":u / :undo", "Undo previous state change"},

@@ -33,13 +33,19 @@ _gowiz_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval"
-    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule cat category categories info diag status config recent export import undo help scan quit completion"
+    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd cat category categories info diag status config recent export import undo help scan quit completion"
     presets="evening movie night focus work relax party list save delete"
     categories="nature cozy white party mood dynamic"
     shells="bash zsh fish"
+    services="install uninstall status systemd launchd"
 
     if [[ ${cur} == -* ]] ; then
         COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        return 0
+    fi
+
+    if [[ ${prev} == "service" ]] ; then
+        COMPREPLY=( $(compgen -W "${services}" -- ${cur}) )
         return 0
     fi
 
@@ -89,6 +95,7 @@ _gowiz() {
         'sunset:Start sunset lighting simulation'
         'circadian:Apply 24-hour circadian lighting rhythm'
         'daemon:Run background circadian schedule sync daemon'
+        'service:Manage systemd or launchd background daemon service'
         'cat:Filter scenes by category'
         'info:Display device telemetry diagnostics'
         'config:Display configuration status'
@@ -128,6 +135,9 @@ _gowiz() {
                     ;;
                 preset)
                     _values 'preset action' list save delete evening movie night focus work relax party
+                    ;;
+                service)
+                    _values 'service action' install uninstall status systemd launchd
                     ;;
                 cat|category)
                     _values 'category' nature cozy white party mood dynamic
@@ -170,6 +180,7 @@ complete -c gowiz -n "__fish_use_subcommand" -a group -d "Execute batch command 
 complete -c gowiz -n "__fish_use_subcommand" -a fade -d "Start linear dimming fade transition"
 complete -c gowiz -n "__fish_use_subcommand" -a circadian -d "Apply 24-hour circadian lighting rhythm"
 complete -c gowiz -n "__fish_use_subcommand" -a daemon -d "Run background circadian schedule sync daemon"
+complete -c gowiz -n "__fish_use_subcommand" -a service -d "Manage systemd or launchd background daemon service"
 complete -c gowiz -n "__fish_use_subcommand" -a cat -d "Filter scenes by category"
 complete -c gowiz -n "__fish_use_subcommand" -a info -d "Display device telemetry diagnostics"
 complete -c gowiz -n "__fish_use_subcommand" -a config -d "Display current configuration"
@@ -180,5 +191,6 @@ complete -c gowiz -n "__fish_use_subcommand" -a completion -d "Generate shell au
 # Subcommands
 complete -c gowiz -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 complete -c gowiz -n "__fish_seen_subcommand_from preset" -a "list save delete evening movie night focus work relax party"
+complete -c gowiz -n "__fish_seen_subcommand_from service" -a "install uninstall status systemd launchd"
 `
 }

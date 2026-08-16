@@ -13,6 +13,7 @@ import (
 	"wiz-tui/internal/completion"
 	"wiz-tui/internal/config"
 	"wiz-tui/internal/daemon"
+	"wiz-tui/internal/service"
 	"wiz-tui/internal/tui"
 	"wiz-tui/internal/wiz"
 )
@@ -218,6 +219,87 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		fmt.Fprint(w, script)
 		return nil
+	}
+
+	// Handle system service installer and config generator
+	if result.ServiceAction != "" {
+		execPath, _ := os.Executable()
+		if execPath == "" {
+			execPath = "gowiz"
+		}
+		interval := result.ServiceInterval
+		if interval == "" {
+			interval = "1m"
+		}
+
+		switch result.ServiceAction {
+		case "systemd":
+			content := service.GenerateSystemd(execPath, interval)
+			if opts.JSONOutput {
+				return printJSON(w, map[string]string{
+					"status":  "ok",
+					"service": "systemd",
+					"content": content,
+				})
+			}
+			fmt.Fprint(w, content)
+			return nil
+		case "launchd":
+			content := service.GenerateLaunchd(execPath, interval)
+			if opts.JSONOutput {
+				return printJSON(w, map[string]string{
+					"status":  "ok",
+					"service": "launchd",
+					"content": content,
+				})
+			}
+			fmt.Fprint(w, content)
+			return nil
+		case "install":
+			msg, err := service.Install(result.ServiceType, execPath, interval)
+			if err != nil {
+				return err
+			}
+			if opts.JSONOutput {
+				return printJSON(w, map[string]string{
+					"status":  "ok",
+					"action":  "install",
+					"message": msg,
+				})
+			}
+			fmt.Fprintln(w, msg)
+			return nil
+		case "uninstall", "remove", "rm":
+			msg, err := service.Uninstall(result.ServiceType)
+			if err != nil {
+				return err
+			}
+			if opts.JSONOutput {
+				return printJSON(w, map[string]string{
+					"status":  "ok",
+					"action":  "uninstall",
+					"message": msg,
+				})
+			}
+			fmt.Fprintln(w, msg)
+			return nil
+		case "status", "info":
+			msg, installed, err := service.Status(result.ServiceType)
+			if err != nil {
+				return err
+			}
+			if opts.JSONOutput {
+				return printJSON(w, map[string]any{
+					"status":    "ok",
+					"installed": installed,
+					"message":   msg,
+				})
+			}
+			fmt.Fprintf(w, "System Service Status: %s\n", msg)
+			return nil
+		default:
+			return fmt.Errorf("unknown service action: %s", result.ServiceAction)
+		}
 	}
 
 	// Handle preset list

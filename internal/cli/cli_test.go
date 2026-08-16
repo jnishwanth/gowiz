@@ -494,4 +494,49 @@ func TestCLIRun(t *testing.T) {
 			t.Errorf("expected daemon startup log message, got: %s", buf.String())
 		}
 	})
+
+	t.Run("System service generation and status", func(t *testing.T) {
+		tempDir := t.TempDir()
+		t.Setenv("HOME", tempDir)
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+
+		// Test systemd text output
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Command:    "systemd",
+			Writer:     &buf,
+		}
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected systemd error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "[Unit]") || !strings.Contains(buf.String(), "--daemon --interval") {
+			t.Errorf("expected systemd config, got: %s", buf.String())
+		}
+
+		// Test launchd text output
+		buf.Reset()
+		opts.Command = "launchd"
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected launchd error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "<string>com.gowiz.daemon</string>") {
+			t.Errorf("expected launchd config, got: %s", buf.String())
+		}
+
+		// Test service status JSON output
+		buf.Reset()
+		opts.Command = "service status systemd"
+		opts.JSONOutput = true
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected service status error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"status": "ok"`) {
+			t.Errorf("expected JSON status ok, got: %s", buf.String())
+		}
+	})
 }

@@ -412,4 +412,21 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected RunDaemon true for :schedule command")
 		}
 	})
+
+	t.Run("Service command dispatch", func(t *testing.T) {
+		resService := ExecuteCommand("service install systemd 5m", dev)
+		if resService.ServiceAction != "install" || resService.ServiceType != "systemd" || resService.ServiceInterval != "5m" {
+			t.Errorf("unexpected ServiceAction result: %+v", resService)
+		}
+
+		resSystemd := ExecuteCommand("systemd", dev)
+		if resSystemd.ServiceAction != "systemd" || resSystemd.ServiceType != "systemd" {
+			t.Errorf("unexpected systemd result: %+v", resSystemd)
+		}
+
+		resLaunchd := ExecuteCommand("launchd", dev)
+		if resLaunchd.ServiceAction != "launchd" || resLaunchd.ServiceType != "launchd" {
+			t.Errorf("unexpected launchd result: %+v", resLaunchd)
+		}
+	})
 }

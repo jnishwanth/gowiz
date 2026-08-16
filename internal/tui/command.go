@@ -44,6 +44,9 @@ type CommandActionResult struct {
 	ImportPath       string // source path for importing config
 	CompletionShell  string // target shell for generating autocompletion script
 	RunDaemon        bool   // request running background circadian daemon
+	ServiceAction    string // service action: install, uninstall, status, systemd, launchd
+	ServiceType      string // target service type: systemd, launchd, auto
+	ServiceInterval  string // daemon sync interval string (e.g., 1m, 5m)
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -901,4 +904,54 @@ func (r *CommandRegistry) registerDefaults() {
 	}
 	r.Register("daemon", daemonHandler)
 	r.Register("schedule", daemonHandler)
+
+	// Service Installer & Configuration Handler
+	serviceHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		action := "status"
+		srvType := "auto"
+		interval := "1m"
+
+		if len(args) > 0 {
+			action = strings.ToLower(strings.TrimSpace(args[0]))
+		}
+
+		if action == "systemd" || action == "launchd" {
+			return CommandActionResult{
+				ServiceAction: action,
+				ServiceType:   action,
+				StatusMsg:     fmt.Sprintf("Generating %s service configuration...", action),
+			}
+		}
+
+		for _, arg := range args[1:] {
+			low := strings.ToLower(strings.TrimSpace(arg))
+			if low == "systemd" || low == "launchd" {
+				srvType = low
+			} else if strings.HasSuffix(low, "m") || strings.HasSuffix(low, "s") || strings.HasSuffix(low, "h") {
+				interval = low
+			}
+		}
+
+		return CommandActionResult{
+			ServiceAction:   action,
+			ServiceType:     srvType,
+			ServiceInterval: interval,
+			StatusMsg:       fmt.Sprintf("System service action: %s (%s)", action, srvType),
+		}
+	}
+	r.Register("service", serviceHandler)
+	r.Register("systemd", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{
+			ServiceAction: "systemd",
+			ServiceType:   "systemd",
+			StatusMsg:     "Generating systemd service configuration...",
+		}
+	})
+	r.Register("launchd", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{
+			ServiceAction: "launchd",
+			ServiceType:   "launchd",
+			StatusMsg:     "Generating launchd plist configuration...",
+		}
+	})
 }
