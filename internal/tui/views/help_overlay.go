@@ -72,7 +72,7 @@ func RenderHelpOverlay(width, height int) string {
 				{":dim <10-100>", "Set exact dimming percentage"},
 				{":fade <lvl|off> [s]", "Smooth brightness fade over seconds (e.g. :fade 20 30)"},
 				{":sunrise / :sunset", "Simulate sunrise / sunset light transitions"},
-				{":circadian [time]", "Apply 24-hr circadian lighting rhythm (e.g. :circadian 14:30)"},
+				{":circadian [room] [t]", "24-hr circadian rhythm (:circadian 14:30 / :circadian room Bedroom)"},
 				{":toggle", "Toggle power state on active/selected lights"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
 				{":u / :undo", "Undo previous state change"},

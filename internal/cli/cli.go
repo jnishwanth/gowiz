@@ -89,7 +89,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("no command specified")
 	}
 
-	result := tui.ExecuteCommandWithPhases(cmdStr, activeDev, cfg.CircadianPhases)
+	result := tui.ExecuteCommandWithRoomPhases(cmdStr, activeDev, cfg.CircadianPhases, cfg.RoomCircadianPhases)
 
 	// Resolve preset params if custom or builtin preset requested
 	if result.ApplyPresetName != "" && result.PilotParams == nil {
@@ -277,20 +277,22 @@ func Run(ctx context.Context, opts Options) error {
 	if result.ConfigInfo {
 		if opts.JSONOutput {
 			type ConfigSummaryJSON struct {
-				ConfigFile    string   `json:"config_file"`
-				LastActiveIP  string   `json:"last_active_ip"`
-				RecentIPs     []string `json:"recent_ips"`
-				DeviceAliases int      `json:"device_aliases_count"`
-				DeviceRooms   int      `json:"device_rooms_count"`
-				CustomPresets int      `json:"custom_presets_count"`
+				ConfigFile          string   `json:"config_file"`
+				LastActiveIP        string   `json:"last_active_ip"`
+				RecentIPs           []string `json:"recent_ips"`
+				DeviceAliases       int      `json:"device_aliases_count"`
+				DeviceRooms         int      `json:"device_rooms_count"`
+				CustomPresets       int      `json:"custom_presets_count"`
+				RoomCircadianPhases int      `json:"room_circadian_phases_count"`
 			}
 			return printJSON(w, ConfigSummaryJSON{
-				ConfigFile:    cfgMgr.FilePath(),
-				LastActiveIP:  cfg.LastActiveIP,
-				RecentIPs:     cfg.RecentIPs,
-				DeviceAliases: len(cfg.DeviceAliases),
-				DeviceRooms:   len(cfg.DeviceRooms),
-				CustomPresets: len(cfg.Presets),
+				ConfigFile:          cfgMgr.FilePath(),
+				LastActiveIP:        cfg.LastActiveIP,
+				RecentIPs:           cfg.RecentIPs,
+				DeviceAliases:       len(cfg.DeviceAliases),
+				DeviceRooms:         len(cfg.DeviceRooms),
+				CustomPresets:       len(cfg.Presets),
+				RoomCircadianPhases: len(cfg.RoomCircadianPhases),
 			})
 		}
 		fmt.Fprintf(w, "Configuration File: %s\n", cfgMgr.FilePath())
@@ -299,6 +301,7 @@ func Run(ctx context.Context, opts Options) error {
 		fmt.Fprintf(w, "Device Aliases: %d\n", len(cfg.DeviceAliases))
 		fmt.Fprintf(w, "Device Rooms: %d\n", len(cfg.DeviceRooms))
 		fmt.Fprintf(w, "Custom Presets: %d\n", len(cfg.Presets))
+		fmt.Fprintf(w, "Room Circadian Schedules: %d\n", len(cfg.RoomCircadianPhases))
 		return nil
 	}
 

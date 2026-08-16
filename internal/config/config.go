@@ -24,13 +24,14 @@ type Preset struct {
 
 // Config represents persistent user settings and custom bulb aliases.
 type Config struct {
-	DeviceAliases   map[string]string         `json:"device_aliases"`
-	DeviceRooms     map[string]string         `json:"device_rooms,omitempty"`
-	Presets         map[string]Preset         `json:"presets,omitempty"`
-	CircadianPhases []circadian.SchedulePhase `json:"circadian_phases,omitempty"`
-	LastActiveIP    string                    `json:"last_active_ip,omitempty"`
-	RecentIPs       []string                  `json:"recent_ips,omitempty"`
-	AutoScan        bool                      `json:"auto_scan"`
+	DeviceAliases       map[string]string                    `json:"device_aliases"`
+	DeviceRooms         map[string]string                    `json:"device_rooms,omitempty"`
+	Presets             map[string]Preset                    `json:"presets,omitempty"`
+	CircadianPhases     []circadian.SchedulePhase            `json:"circadian_phases,omitempty"`
+	RoomCircadianPhases map[string][]circadian.SchedulePhase `json:"room_circadian_phases,omitempty"`
+	LastActiveIP        string                               `json:"last_active_ip,omitempty"`
+	RecentIPs           []string                             `json:"recent_ips,omitempty"`
+	AutoScan            bool                                 `json:"auto_scan"`
 }
 
 // Manager manages concurrent-safe loading, saving, and querying of the gowiz config file.
@@ -43,11 +44,12 @@ type Manager struct {
 // DefaultConfig returns standard initial configuration values.
 func DefaultConfig() Config {
 	return Config{
-		DeviceAliases: make(map[string]string),
-		DeviceRooms:   make(map[string]string),
-		Presets:       make(map[string]Preset),
-		RecentIPs:     make([]string, 0),
-		AutoScan:      true,
+		DeviceAliases:       make(map[string]string),
+		DeviceRooms:         make(map[string]string),
+		Presets:             make(map[string]Preset),
+		RoomCircadianPhases: make(map[string][]circadian.SchedulePhase),
+		RecentIPs:           make([]string, 0),
+		AutoScan:            true,
 	}
 }
 
@@ -104,6 +106,9 @@ func (m *Manager) Load() error {
 	if cfg.Presets == nil {
 		cfg.Presets = make(map[string]Preset)
 	}
+	if cfg.RoomCircadianPhases == nil {
+		cfg.RoomCircadianPhases = make(map[string][]circadian.SchedulePhase)
+	}
 	m.cfg = cfg
 	return nil
 }
@@ -155,14 +160,24 @@ func (m *Manager) GetConfig() Config {
 		copy(phasesCopy, m.cfg.CircadianPhases)
 	}
 
+	roomPhasesCopy := make(map[string][]circadian.SchedulePhase)
+	for room, phases := range m.cfg.RoomCircadianPhases {
+		if len(phases) > 0 {
+			pCopy := make([]circadian.SchedulePhase, len(phases))
+			copy(pCopy, phases)
+			roomPhasesCopy[room] = pCopy
+		}
+	}
+
 	return Config{
-		DeviceAliases:   aliasesCopy,
-		DeviceRooms:     roomsCopy,
-		Presets:         presetsCopy,
-		CircadianPhases: phasesCopy,
-		LastActiveIP:    m.cfg.LastActiveIP,
-		RecentIPs:       recentCopy,
-		AutoScan:        m.cfg.AutoScan,
+		DeviceAliases:       aliasesCopy,
+		DeviceRooms:         roomsCopy,
+		Presets:             presetsCopy,
+		CircadianPhases:     phasesCopy,
+		RoomCircadianPhases: roomPhasesCopy,
+		LastActiveIP:        m.cfg.LastActiveIP,
+		RecentIPs:           recentCopy,
+		AutoScan:            m.cfg.AutoScan,
 	}
 }
 
@@ -386,6 +401,18 @@ func (m *Manager) ImportFromFile(srcPath string) error {
 		m.cfg.CircadianPhases = make([]circadian.SchedulePhase, len(imported.CircadianPhases))
 		copy(m.cfg.CircadianPhases, imported.CircadianPhases)
 	}
+	if imported.RoomCircadianPhases != nil {
+		if m.cfg.RoomCircadianPhases == nil {
+			m.cfg.RoomCircadianPhases = make(map[string][]circadian.SchedulePhase)
+		}
+		for room, phases := range imported.RoomCircadianPhases {
+			if len(phases) > 0 {
+				pCopy := make([]circadian.SchedulePhase, len(phases))
+				copy(pCopy, phases)
+				m.cfg.RoomCircadianPhases[strings.ToLower(strings.TrimSpace(room))] = pCopy
+			}
+		}
+	}
 	for _, ip := range imported.RecentIPs {
 		if ip != "" {
 			found := false
@@ -436,4 +463,56 @@ func (m *Manager) GetCircadianPhases() []circadian.SchedulePhase {
 	phasesCopy := make([]circadian.SchedulePhase, len(m.cfg.CircadianPhases))
 	copy(phasesCopy, m.cfg.CircadianPhases)
 	return phasesCopy
+}
+
+// SetRoomCircadianPhases updates and persists custom 24-hour circadian schedule phases for a specific room.
+func (m *Manager) SetRoomCircadianPhases(room string, phases []circadian.SchedulePhase) error {
+	roomKey := strings.ToLower(strings.TrimSpace(room))
+	if roomKey == "" {
+		return fmt.Errorf("room name cannot be empty")
+	}
+	if len(phases) > 0 {
+		if err := circadian.ValidatePhases(phases); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	if m.cfg.RoomCircadianPhases == nil {
+		m.cfg.RoomCircadianPhases = make(map[string][]circadian.SchedulePhase)
+	}
+	if len(phases) == 0 {
+		delete(m.cfg.RoomCircadianPhases, roomKey)
+	} else {
+		phasesCopy := make([]circadian.SchedulePhase, len(phases))
+		copy(phasesCopy, phases)
+		m.cfg.RoomCircadianPhases[roomKey] = phasesCopy
+	}
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// GetRoomCircadianPhases retrieves custom circadian schedule phases configured specifically for a room.
+func (m *Manager) GetRoomCircadianPhases(room string) []circadian.SchedulePhase {
+	roomKey := strings.ToLower(strings.TrimSpace(room))
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cfg.RoomCircadianPhases == nil {
+		return nil
+	}
+	phases, found := m.cfg.RoomCircadianPhases[roomKey]
+	if !found || len(phases) == 0 {
+		return nil
+	}
+	phasesCopy := make([]circadian.SchedulePhase, len(phases))
+	copy(phasesCopy, phases)
+	return phasesCopy
+}
+
+// GetCircadianPhasesForRoom retrieves room-specific circadian phases if configured, or falls back to global custom phases.
+func (m *Manager) GetCircadianPhasesForRoom(room string) []circadian.SchedulePhase {
+	roomPhases := m.GetRoomCircadianPhases(room)
+	if len(roomPhases) > 0 {
+		return roomPhases
+	}
+	return m.GetCircadianPhases()
 }

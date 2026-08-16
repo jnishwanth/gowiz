@@ -426,6 +426,34 @@ func TestCLIRun(t *testing.T) {
 		}
 	})
 
+	t.Run("Room_circadian_with_custom_config_phases", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		mgr := config.NewManager(cfgPath)
+		_ = mgr.SetRoom("192.168.1.101", "Bedroom")
+		_ = mgr.SetRoomCircadianPhases("Bedroom", []circadian.SchedulePhase{
+			{Name: "Bedroom Morning", StartHour: 0, EndHour: 12, StartTemp: 2200, EndTemp: 3000, StartDimming: 20, EndDimming: 50},
+			{Name: "Bedroom Evening", StartHour: 12, EndHour: 24, StartTemp: 3000, EndTemp: 2200, StartDimming: 50, EndDimming: 20},
+		})
+
+		var buf bytes.Buffer
+		opts := Options{
+			ConfigPath: cfgPath,
+			TargetIP:   "192.168.1.101",
+			Mock:       true,
+			Command:    "circadian room Bedroom 14:00",
+			Writer:     &buf,
+		}
+
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Successfully sent command to room 'Bedroom'") {
+			t.Errorf("expected output to contain room batch success message, got: %s", buf.String())
+		}
+	})
+
 	t.Run("Shell completion script generation plain text", func(t *testing.T) {
 		tempDir := t.TempDir()
 		cfgPath := filepath.Join(tempDir, "config.json")

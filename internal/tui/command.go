@@ -50,8 +50,9 @@ type CommandHandler func(args []string, activeDev *wiz.Device) CommandActionResu
 
 // CommandRegistry manages registered TUI command verbs and aliases.
 type CommandRegistry struct {
-	handlers        map[string]CommandHandler
-	circadianPhases []circadian.SchedulePhase
+	handlers            map[string]CommandHandler
+	circadianPhases     []circadian.SchedulePhase
+	roomCircadianPhases map[string][]circadian.SchedulePhase
 }
 
 // NewCommandRegistry initializes a default TUI command registry.
@@ -66,6 +67,33 @@ func NewCommandRegistry() *CommandRegistry {
 // SetCircadianPhases sets the custom circadian schedule phases for rhythm calculation.
 func (r *CommandRegistry) SetCircadianPhases(phases []circadian.SchedulePhase) {
 	r.circadianPhases = phases
+}
+
+// SetRoomCircadianPhases sets room-specific circadian schedule phases for rhythm calculation.
+func (r *CommandRegistry) SetRoomCircadianPhases(roomPhases map[string][]circadian.SchedulePhase) {
+	if roomPhases == nil {
+		r.roomCircadianPhases = nil
+		return
+	}
+	r.roomCircadianPhases = make(map[string][]circadian.SchedulePhase)
+	for room, phases := range roomPhases {
+		if len(phases) > 0 {
+			pCopy := make([]circadian.SchedulePhase, len(phases))
+			copy(pCopy, phases)
+			r.roomCircadianPhases[strings.ToLower(strings.TrimSpace(room))] = pCopy
+		}
+	}
+}
+
+// GetPhasesForRoom returns room-specific circadian phases if set, otherwise global custom phases.
+func (r *CommandRegistry) GetPhasesForRoom(room string) []circadian.SchedulePhase {
+	roomKey := strings.ToLower(strings.TrimSpace(room))
+	if roomKey != "" && r.roomCircadianPhases != nil {
+		if phases, found := r.roomCircadianPhases[roomKey]; found && len(phases) > 0 {
+			return phases
+		}
+	}
+	return r.circadianPhases
 }
 
 // Register adds or replaces a handler for a given verb or alias.
@@ -104,6 +132,13 @@ func ExecuteCommand(cmdStr string, activeDev *wiz.Device) CommandActionResult {
 // ExecuteCommandWithPhases runs a command string against default global command registry with custom circadian phases.
 func ExecuteCommandWithPhases(cmdStr string, activeDev *wiz.Device, phases []circadian.SchedulePhase) CommandActionResult {
 	defaultRegistry.SetCircadianPhases(phases)
+	return defaultRegistry.Execute(cmdStr, activeDev)
+}
+
+// ExecuteCommandWithRoomPhases runs a command string against default global command registry with custom global and room circadian phases.
+func ExecuteCommandWithRoomPhases(cmdStr string, activeDev *wiz.Device, globalPhases []circadian.SchedulePhase, roomPhases map[string][]circadian.SchedulePhase) CommandActionResult {
+	defaultRegistry.SetCircadianPhases(globalPhases)
+	defaultRegistry.SetRoomCircadianPhases(roomPhases)
 	return defaultRegistry.Execute(cmdStr, activeDev)
 }
 
@@ -654,10 +689,19 @@ func (r *CommandRegistry) registerDefaults() {
 		if subIdx != -1 {
 			roomName := strings.Join(args[:subIdx], " ")
 			subCmdStr := strings.Join(args[subIdx:], " ")
+
+			subVerb := strings.ToLower(args[subIdx])
+			if subVerb == "circadian" || subVerb == "rhythm" {
+				if !strings.Contains(strings.ToLower(subCmdStr), "room") {
+					rest := strings.Join(args[subIdx+1:], " ")
+					subCmdStr = fmt.Sprintf("%s room %s %s", subVerb, roomName, rest)
+				}
+			}
+
 			subRes := r.Execute(subCmdStr, activeDev)
 			subRes.TargetRoom = roomName
 			if subRes.PilotParams != nil || subRes.ApplyPresetName != "" {
-				subRes.StatusMsg = fmt.Sprintf("Group command '%s' sent to room '%s'", subCmdStr, roomName)
+				subRes.StatusMsg = fmt.Sprintf("Group command '%s' sent to room '%s'", strings.TrimSpace(subCmdStr), roomName)
 			}
 			return subRes
 		}
@@ -801,14 +845,27 @@ func (r *CommandRegistry) registerDefaults() {
 	// Circadian Rhythm Handler
 	circadianHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
 		targetTime := time.Now()
+		targetRoom := ""
+
 		if len(args) > 0 {
-			arg := strings.ToLower(args[0])
-			if arg == "info" || arg == "status" {
-				info := circadian.CalculateWithPhases(targetTime, r.circadianPhases)
+			arg0 := strings.ToLower(args[0])
+			if arg0 == "info" || arg0 == "status" {
+				phases := r.circadianPhases
+				if len(args) > 1 {
+					phases = r.GetPhasesForRoom(args[1])
+				}
+				info := circadian.CalculateWithPhases(targetTime, phases)
 				return CommandActionResult{
 					StatusMsg: fmt.Sprintf("Circadian Status: %s", info.Status),
 				}
 			}
+			if arg0 == "room" && len(args) >= 2 {
+				targetRoom = args[1]
+				args = args[2:]
+			}
+		}
+
+		if len(args) > 0 {
 			t, err := circadian.ParseTimeArg(args[0])
 			if err != nil {
 				return CommandActionResult{StatusMsg: err.Error()}
@@ -816,9 +873,17 @@ func (r *CommandRegistry) registerDefaults() {
 			targetTime = t
 		}
 
-		info := circadian.CalculateWithPhases(targetTime, r.circadianPhases)
+		phases := r.GetPhasesForRoom(targetRoom)
+		info := circadian.CalculateWithPhases(targetTime, phases)
+
+		msg := fmt.Sprintf("Circadian rhythm set: %s", info.Status)
+		if targetRoom != "" {
+			msg = fmt.Sprintf("Circadian rhythm for room '%s': %s", targetRoom, info.Status)
+		}
+
 		return CommandActionResult{
-			StatusMsg:   fmt.Sprintf("Circadian rhythm set: %s", info.Status),
+			TargetRoom:  targetRoom,
+			StatusMsg:   msg,
 			PilotParams: &info.Params,
 			FadeLabel:   fmt.Sprintf("🌅 %s", info.Phase),
 		}

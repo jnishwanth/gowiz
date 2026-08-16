@@ -375,5 +375,30 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		if resCustom.FadeLabel != "🌅 Custom Dusk" {
 			t.Errorf("expected FadeLabel '🌅 Custom Dusk', got %q", resCustom.FadeLabel)
 		}
+
+		roomPhases := map[string][]circadian.SchedulePhase{
+			"bedroom": {
+				{Name: "Bedroom Sleepy Morning", StartHour: 0, EndHour: 12, StartTemp: 2200, EndTemp: 3000, StartDimming: 20, EndDimming: 40},
+				{Name: "Bedroom Winddown", StartHour: 12, EndHour: 24, StartTemp: 3000, EndTemp: 2200, StartDimming: 40, EndDimming: 20},
+			},
+		}
+		resRoom := ExecuteCommandWithRoomPhases("circadian room Bedroom 14:00", dev, customPhases, roomPhases)
+		if resRoom.PilotParams == nil {
+			t.Fatalf("expected PilotParams for room circadian command")
+		}
+		if resRoom.TargetRoom != "Bedroom" {
+			t.Errorf("expected TargetRoom 'Bedroom', got %q", resRoom.TargetRoom)
+		}
+		if resRoom.FadeLabel != "🌅 Bedroom Winddown" {
+			t.Errorf("expected FadeLabel '🌅 Bedroom Winddown', got %q", resRoom.FadeLabel)
+		}
+
+		resGroupCirc := ExecuteCommandWithRoomPhases("group Bedroom circadian 14:00", dev, customPhases, roomPhases)
+		if resGroupCirc.TargetRoom != "Bedroom" || resGroupCirc.PilotParams == nil {
+			t.Fatalf("expected TargetRoom 'Bedroom' and PilotParams for group circadian command")
+		}
+		if resGroupCirc.FadeLabel != "🌅 Bedroom Winddown" {
+			t.Errorf("expected FadeLabel '🌅 Bedroom Winddown' via group circadian, got %q", resGroupCirc.FadeLabel)
+		}
 	})
 }

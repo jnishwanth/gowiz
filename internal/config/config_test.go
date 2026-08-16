@@ -366,3 +366,65 @@ func TestConfigManagerCircadianPhases(t *testing.T) {
 		t.Errorf("expected nil after clearing circadian phases, got %v", cleared)
 	}
 }
+
+func TestConfigManagerRoomCircadianPhases(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "room_circadian_config.json")
+
+	mgr := config.NewManager(cfgPath)
+	if phases := mgr.GetRoomCircadianPhases("Bedroom"); phases != nil {
+		t.Errorf("expected initial Bedroom room circadian phases to be nil, got %v", phases)
+	}
+
+	bedroomPhases := []circadian.SchedulePhase{
+		{Name: "Bedroom Sleepy Morning", StartHour: 0, EndHour: 9, StartTemp: 2200, EndTemp: 3000, StartDimming: 20, EndDimming: 50},
+		{Name: "Bedroom Coziness", StartHour: 9, EndHour: 24, StartTemp: 3000, EndTemp: 2200, StartDimming: 50, EndDimming: 20},
+	}
+
+	err := mgr.SetRoomCircadianPhases("Bedroom", bedroomPhases)
+	if err != nil {
+		t.Fatalf("unexpected error setting room circadian phases: %v", err)
+	}
+
+	// Verify case-insensitive room retrieval
+	retrieved := mgr.GetRoomCircadianPhases("bedroom")
+	if len(retrieved) != 2 {
+		t.Fatalf("expected 2 retrieved phases for bedroom, got %d", len(retrieved))
+	}
+	if retrieved[0].Name != "Bedroom Sleepy Morning" {
+		t.Errorf("unexpected phase name: %s", retrieved[0].Name)
+	}
+
+	// Verify fallback to global phases when room phases not set
+	globalPhases := []circadian.SchedulePhase{
+		{Name: "Global Day", StartHour: 0, EndHour: 24, StartTemp: 5000, EndTemp: 5000, StartDimming: 100, EndDimming: 100},
+	}
+	_ = mgr.SetCircadianPhases(globalPhases)
+
+	// Bedroom has specific phases
+	bRes := mgr.GetCircadianPhasesForRoom("bedroom")
+	if len(bRes) != 2 || bRes[0].Name != "Bedroom Sleepy Morning" {
+		t.Errorf("expected bedroom-specific phases, got %+v", bRes)
+	}
+
+	// Office has no specific phases, should fall back to global
+	oRes := mgr.GetCircadianPhasesForRoom("Office")
+	if len(oRes) != 1 || oRes[0].Name != "Global Day" {
+		t.Errorf("expected fallback to global phases for Office, got %+v", oRes)
+	}
+
+	// Verify persistence across reload
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("failed to reload config: %v", err)
+	}
+	reloaded := mgr2.GetRoomCircadianPhases("Bedroom")
+	if len(reloaded) != 2 {
+		t.Fatalf("expected 2 reloaded room phases, got %d", len(reloaded))
+	}
+
+	// Test error on empty room name
+	if err := mgr.SetRoomCircadianPhases("", bedroomPhases); err == nil {
+		t.Errorf("expected error when setting room circadian phase with empty room name")
+	}
+}

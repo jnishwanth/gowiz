@@ -609,10 +609,13 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 
 		activeDev, _ := m.Registry.GetActive()
 		var customPhases []circadian.SchedulePhase
+		var roomPhases map[string][]circadian.SchedulePhase
 		if m.configManager != nil {
-			customPhases = m.configManager.GetCircadianPhases()
+			cfg := m.configManager.GetConfig()
+			customPhases = cfg.CircadianPhases
+			roomPhases = cfg.RoomCircadianPhases
 		}
-		res := ExecuteCommandWithPhases(cmdStr, activeDev, customPhases)
+		res := ExecuteCommandWithRoomPhases(cmdStr, activeDev, customPhases, roomPhases)
 
 		if res.Quit {
 			return m, tea.Quit
