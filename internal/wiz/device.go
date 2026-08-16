@@ -412,19 +412,37 @@ func (r *DeviceRegistry) GetDevicesByGroup(group string, groups map[string][]str
 	return result
 }
 
-// GetDevicesBySelector resolves devices by wildcard target ("all", "*", "everyone", "broadcast"), custom group, or room name.
+// GetDevicesBySelector resolves devices by wildcard target ("all", "*", "everyone", "broadcast"), custom group, room name, or direct device IP/MAC/Name match.
 func (r *DeviceRegistry) GetDevicesBySelector(target string, groups map[string][]string) []*Device {
 	targetLower := strings.ToLower(strings.TrimSpace(target))
+	if targetLower == "" {
+		return nil
+	}
 	if targetLower == "all" || targetLower == "*" || targetLower == "everyone" || targetLower == "broadcast" {
 		return r.List()
 	}
-	if devs := r.GetDevicesByGroup(target, groups); len(devs) > 0 {
+	if devs := r.GetDevicesByGroup(targetLower, groups); len(devs) > 0 {
 		return devs
 	}
-	return r.GetDevicesByRoom(target)
+	if devs := r.GetDevicesByRoom(targetLower); len(devs) > 0 {
+		return devs
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, ip := range r.order {
+		if dev, found := r.devices[ip]; found {
+			if strings.EqualFold(dev.IP, targetLower) ||
+				(dev.MAC != "" && strings.EqualFold(dev.MAC, targetLower)) ||
+				(dev.Name != "" && strings.EqualFold(dev.Name, targetLower)) {
+				return []*Device{dev}
+			}
+		}
+	}
+	return nil
 }
 
-// GetDevicesByGroupOrRoom resolves devices by selector (all/wildcard, custom group, or room name).
+// GetDevicesByGroupOrRoom resolves devices by selector (all/wildcard, custom group, room name, or individual device).
 func (r *DeviceRegistry) GetDevicesByGroupOrRoom(target string, groups map[string][]string) []*Device {
 	return r.GetDevicesBySelector(target, groups)
 }

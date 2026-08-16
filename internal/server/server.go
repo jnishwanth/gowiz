@@ -573,9 +573,13 @@ func (s *Server) handleEffects(w http.ResponseWriter, r *http.Request) {
 
 	targetIPs := []string{}
 	if req.Room != "" {
-		targets := s.cfg.DevRegistry.GetDevicesByRoom(req.Room)
+		var groups map[string][]string
+		if s.cfg.ConfigMgr != nil {
+			groups = s.cfg.ConfigMgr.GetGroups()
+		}
+		targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, groups)
 		if len(targets) == 0 {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found in room %q", req.Room))
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target %q", req.Room))
 			return
 		}
 		for _, dev := range targets {
@@ -673,9 +677,13 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 
 		ctx := r.Context()
 		if req.Room != "" {
-			targets := s.cfg.DevRegistry.GetDevicesByRoom(req.Room)
+			var groups map[string][]string
+			if s.cfg.ConfigMgr != nil {
+				groups = s.cfg.ConfigMgr.GetGroups()
+			}
+			targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, groups)
 			if len(targets) == 0 {
-				writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found in room '%s'", req.Room))
+				writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target '%s'", req.Room))
 				return
 			}
 			ips := make([]string, len(targets))

@@ -703,9 +703,13 @@ func Run(ctx context.Context, opts Options) error {
 	if result.EffectConfig != nil {
 		targetIPs := []string{}
 		if result.TargetRoom != "" {
-			targets := reg.GetDevicesByRoom(result.TargetRoom)
+			var groups map[string][]string
+			if cfgMgr != nil {
+				groups = cfgMgr.GetGroups()
+			}
+			targets := reg.GetDevicesBySelector(result.TargetRoom, groups)
 			if len(targets) == 0 {
-				return fmt.Errorf("no devices found in room '%s'", result.TargetRoom)
+				return fmt.Errorf("no devices found matching target '%s'", result.TargetRoom)
 			}
 			for _, dev := range targets {
 				targetIPs = append(targetIPs, dev.IP)

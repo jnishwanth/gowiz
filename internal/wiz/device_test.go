@@ -213,5 +213,33 @@ func TestDeviceRegistry(t *testing.T) {
 		if len(groupDevs) != 1 || groupDevs[0].IP != "192.168.1.10" {
 			t.Errorf("expected 1 device for group 'office', got %v", groupDevs)
 		}
+
+		// Test direct IP matching
+		ipDevs := regAll.GetDevicesBySelector("192.168.1.11", groups)
+		if len(ipDevs) != 1 || ipDevs[0].IP != "192.168.1.11" {
+			t.Errorf("expected 1 device for direct IP '192.168.1.11', got %v", ipDevs)
+		}
+
+		// Test direct MAC and Name matching
+		d1.MAC = "a8bb50123456"
+		d1.Name = "Reading Lamp"
+		macDevs := regAll.GetDevicesBySelector("A8BB50123456", groups)
+		if len(macDevs) != 1 || macDevs[0].IP != "192.168.1.10" {
+			t.Errorf("expected 1 device for MAC 'A8BB50123456', got %v", macDevs)
+		}
+
+		nameDevs := regAll.GetDevicesBySelector("reading lamp", groups)
+		if len(nameDevs) != 1 || nameDevs[0].IP != "192.168.1.10" {
+			t.Errorf("expected 1 device for Name 'reading lamp', got %v", nameDevs)
+		}
+
+		// Test empty and unmatched targets
+		if devs := regAll.GetDevicesBySelector("", groups); devs != nil {
+			t.Errorf("expected nil for empty target, got %v", devs)
+		}
+		if devs := regAll.GetDevicesBySelector("nonexistent", groups); devs != nil {
+			t.Errorf("expected nil for non-existent target, got %v", devs)
+		}
 	})
 }
+
