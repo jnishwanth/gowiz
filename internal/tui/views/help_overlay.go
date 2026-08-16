@@ -65,6 +65,8 @@ func RenderHelpOverlay(width, height int) string {
 				{":rgb <r> <g> <b>", "Set RGB color values (0-255)"},
 				{":hex <#code>", "Set color by HEX code (e.g. :hex #ff5500)"},
 				{":dim <10-100>", "Set exact dimming percentage"},
+				{":fade <lvl|off> [s]", "Smooth brightness fade over seconds (e.g. :fade 20 30)"},
+				{":sunrise / :sunset", "Simulate sunrise / sunset light transitions"},
 				{":toggle", "Toggle power state on active/selected lights"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
 				{":u / :undo", "Undo previous state change"},

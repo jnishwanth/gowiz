@@ -232,7 +232,12 @@ func TestTUIStateSynchronization(t *testing.T) {
 		// Panel 1 (Devices): Pressing Enter sets active device
 		m.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.200"))
 		m.activePanel = PanelDevices
-		m.deviceCursor = 1 // Second device
+		for i, d := range m.Registry.List() {
+			if d.IP == "192.168.1.200" {
+				m.deviceCursor = i
+				break
+			}
+		}
 
 		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		m = updated.(Model)
@@ -990,3 +995,68 @@ func TestTUIStateSynchronization(t *testing.T) {
 	})
 }
 
+func TestTUIFadeTransitions(t *testing.T) {
+	mock := wiz.NewMockClient()
+	dev := wiz.NewDevice("192.168.1.50")
+	dev.State = true
+	dev.Brightness = 100
+	dev.Temp = 6500
+
+	m := NewModelWithConfig(mock, "192.168.1.50", "")
+	m.Registry.AddOrUpdate(dev)
+	m.setActiveDevice("192.168.1.50")
+
+	// Trigger :fade 20 10 (fade to 20% over 10 seconds)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	m = updated.(Model)
+	for _, r := range "fade 20 10" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if !m.fadeActive {
+		t.Fatalf("expected fadeActive to be true after :fade command")
+	}
+	if m.fadeTargetDim != 20 || m.fadeDurationSecs != 10 {
+		t.Errorf("expected target dim 20, duration 10, got dim %d, dur %d", m.fadeTargetDim, m.fadeDurationSecs)
+	}
+
+	// Simulate TimerTicks and verify progression
+	for i := 0; i < 5; i++ {
+		updated, cmd := m.Update(TimerTickMsg{})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			if msg != nil {
+				updated, _ = m.Update(msg)
+				m = updated.(Model)
+			}
+		}
+	}
+
+	if m.fadeElapsedSecs != 5 {
+		t.Errorf("expected 5 elapsed fade seconds after 5 ticks, got %d", m.fadeElapsedSecs)
+	}
+
+	// Finish remaining ticks to complete fade
+	for i := 0; i < 6; i++ {
+		updated, cmd := m.Update(TimerTickMsg{})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			if msg != nil {
+				updated, _ = m.Update(msg)
+				m = updated.(Model)
+			}
+		}
+	}
+
+	if m.fadeActive {
+		t.Errorf("expected fadeActive to be false after duration elapsed")
+	}
+	if !strings.Contains(m.statusMessage, "complete") {
+		t.Errorf("expected fade completion status message, got %q", m.statusMessage)
+	}
+}

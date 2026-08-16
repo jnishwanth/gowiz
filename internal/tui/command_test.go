@@ -220,6 +220,28 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("Fade and Sun transition commands", func(t *testing.T) {
+		resFade := ExecuteCommand("fade 20 45", dev)
+		if !resFade.IsFadeCommand || resFade.SetFadeDimming != 20 || resFade.SetFadeDuration != 45 {
+			t.Errorf("expected fade dimming 20, duration 45, got dim: %d, dur: %d", resFade.SetFadeDimming, resFade.SetFadeDuration)
+		}
+
+		resFadeOff := ExecuteCommand("fade off 30", dev)
+		if !resFadeOff.IsFadeCommand || !resFadeOff.FadeTurnOff || resFadeOff.SetFadeDuration != 30 {
+			t.Errorf("expected fade off turnOff true, duration 30")
+		}
+
+		resSunrise := ExecuteCommand("sunrise 120", dev)
+		if !resSunrise.IsFadeCommand || resSunrise.SetFadeDimming != 100 || resSunrise.SetFadeColorTemp != 4200 || resSunrise.SetFadeDuration != 120 {
+			t.Errorf("expected sunrise 100%% 4200K over 120s")
+		}
+
+		resSunset := ExecuteCommand("sunset 60", dev)
+		if !resSunset.IsFadeCommand || !resSunset.FadeTurnOff || resSunset.SetFadeColorTemp != 2700 || resSunset.SetFadeDuration != 60 {
+			t.Errorf("expected sunset fade turnOff true, 2700K over 60s")
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {

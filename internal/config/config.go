@@ -306,4 +306,3 @@ func (m *Manager) GetPresets() map[string]Preset {
 	}
 	return presetsCopy
 }
-

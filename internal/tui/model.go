@@ -15,22 +15,31 @@ import (
 )
 
 type Model struct {
-	client         wiz.Client
-	Registry       *wiz.DeviceRegistry
-	configManager  *config.Manager
-	mode           Mode
-	activePanel    Panel
-	commandBuffer  string
-	searchQuery    string
-	statusMessage  string
-	statusTimer    time.Time
-	width          int
-	height         int
-	sceneCursor    int
-	deviceCursor   int
-	sleepTimerSecs int
-	animFrame      int
-	undoStack      map[string][]wiz.PilotParams
+	client              wiz.Client
+	Registry            *wiz.DeviceRegistry
+	configManager       *config.Manager
+	mode                Mode
+	activePanel         Panel
+	commandBuffer       string
+	searchQuery         string
+	statusMessage       string
+	statusTimer         time.Time
+	width               int
+	height              int
+	sceneCursor         int
+	deviceCursor        int
+	sleepTimerSecs      int
+	fadeActive          bool
+	fadeStartDim        int
+	fadeTargetDim       int
+	fadeStartTemp       int
+	fadeTargetTemp      int
+	fadeDurationSecs    int
+	fadeElapsedSecs     int
+	fadeTurnOffOnFinish bool
+	fadeLabel           string
+	animFrame           int
+	undoStack           map[string][]wiz.PilotParams
 }
 
 func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) Model {
@@ -197,6 +206,79 @@ func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
 	return m.dispatchPilotCmdToDevices(m.Registry.GetSelectedOrActive(), params)
 }
 
+func (m *Model) processTimerTick() []tea.Cmd {
+	var cmds []tea.Cmd
+	if m.sleepTimerSecs > 0 {
+		m.sleepTimerSecs--
+		if m.sleepTimerSecs == 0 {
+			m.setStatusMessage("Sleep timer expired. Turning off lights.")
+			cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
+			cmds = append(cmds, SendOSCNotification("gowiz Sleep Timer", "Sleep timer expired. Turning off WiZ lights."))
+		}
+	}
+
+	if fadeCmd := m.processFadeStep(); fadeCmd != nil {
+		cmds = append(cmds, fadeCmd)
+	}
+
+	if m.statusMessage != "" && time.Since(m.statusTimer) > 4*time.Second {
+		m.statusMessage = ""
+	}
+
+	cmds = append(cmds, tickTimerCmd())
+	return cmds
+}
+
+func (m *Model) processFadeStep() tea.Cmd {
+	if !m.fadeActive {
+		return nil
+	}
+
+	m.fadeElapsedSecs++
+	if m.fadeElapsedSecs >= m.fadeDurationSecs {
+		m.fadeActive = false
+		lbl := m.fadeLabel
+		if lbl == "" {
+			lbl = "Fade"
+		}
+		m.setStatusMessage(fmt.Sprintf("%s transition complete.", lbl))
+
+		if m.fadeTurnOffOnFinish {
+			return m.dispatchPilotCmd(wiz.NewPowerParams(false))
+		}
+
+		st := true
+		params := wiz.PilotParams{State: &st}
+		if m.fadeTargetDim > 0 {
+			dim := wiz.Clamp(m.fadeTargetDim, 10, 100)
+			params.Dimming = &dim
+		}
+		if m.fadeTargetTemp > 0 {
+			temp := wiz.Clamp(m.fadeTargetTemp, 2200, 6500)
+			params.Temp = &temp
+		}
+		return m.dispatchPilotCmd(params)
+	}
+
+	progress := float64(m.fadeElapsedSecs) / float64(m.fadeDurationSecs)
+	curDim := m.fadeStartDim + int(float64(m.fadeTargetDim-m.fadeStartDim)*progress)
+	curDim = wiz.Clamp(curDim, 10, 100)
+
+	st := true
+	params := wiz.PilotParams{
+		State:   &st,
+		Dimming: &curDim,
+	}
+
+	if m.fadeTargetTemp > 0 && m.fadeStartTemp > 0 {
+		curTemp := m.fadeStartTemp + int(float64(m.fadeTargetTemp-m.fadeStartTemp)*progress)
+		curTemp = wiz.Clamp(curTemp, 2200, 6500)
+		params.Temp = &curTemp
+	}
+
+	return m.dispatchPilotCmd(params)
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -210,18 +292,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickAnimCmd())
 
 	case TimerTickMsg:
-		if m.sleepTimerSecs > 0 {
-			m.sleepTimerSecs--
-			if m.sleepTimerSecs == 0 {
-				m.setStatusMessage("Sleep timer expired. Turning off lights.")
-				cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
-				cmds = append(cmds, SendOSCNotification("gowiz Sleep Timer", "Sleep timer expired. Turning off WiZ lights."))
-			}
-		}
-		if m.statusMessage != "" && time.Since(m.statusTimer) > 4*time.Second {
-			m.statusMessage = ""
-		}
-		cmds = append(cmds, tickTimerCmd())
+		cmds = append(cmds, m.processTimerTick()...)
 
 	case TelemetryTickMsg:
 		cmds = append(cmds, m.pollTelemetryCmd(), tickTelemetryCmd())
@@ -552,6 +623,30 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 		if res.SetSleepTimer > 0 {
 			m.sleepTimerSecs = res.SetSleepTimer
 		}
+		if res.IsFadeCommand {
+			startDim := 50
+			startTemp := 2700
+			if activeDev != nil {
+				if activeDev.Brightness > 0 {
+					startDim = activeDev.Brightness
+				}
+				if activeDev.Temp > 0 {
+					startTemp = activeDev.Temp
+				}
+			}
+			m.fadeActive = true
+			m.fadeStartDim = startDim
+			m.fadeTargetDim = res.SetFadeDimming
+			m.fadeStartTemp = startTemp
+			m.fadeTargetTemp = res.SetFadeColorTemp
+			m.fadeDurationSecs = res.SetFadeDuration
+			m.fadeElapsedSecs = 0
+			m.fadeTurnOffOnFinish = res.FadeTurnOff
+			m.fadeLabel = res.FadeLabel
+			if m.fadeLabel == "" {
+				m.fadeLabel = "🌆 Fade"
+			}
+		}
 		if res.Undo {
 			if activeDev != nil {
 				stack := m.undoStack[activeDev.IP]
@@ -832,6 +927,11 @@ func (m Model) View() string {
 	// Total available content height for body (m.height - titleBar line - statusBar line)
 	contentHeight := max(m.height-2, 6)
 
+	fadeRemainingSecs := 0
+	if m.fadeActive {
+		fadeRemainingSecs = max(m.fadeDurationSecs-m.fadeElapsedSecs, 0)
+	}
+
 	// Compact / Narrow Terminal Mode (width < 65 or height < 15)
 	if m.width < 65 || m.height < 15 {
 		var activeBody string
@@ -839,7 +939,7 @@ func (m Model) View() string {
 		case PanelDevices:
 			activeBody = views.RenderDeviceList(m.Registry, m.deviceCursor, true, m.width, contentHeight)
 		case PanelControl:
-			activeBody = views.RenderControlPanel(activeDev, true, m.sleepTimerSecs, m.width, contentHeight)
+			activeBody = views.RenderControlPanel(activeDev, true, m.sleepTimerSecs, fadeRemainingSecs, m.fadeLabel, m.width, contentHeight)
 		case PanelScenes:
 			activeBody = views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, true, m.animFrame, m.width, contentHeight)
 		}
@@ -854,7 +954,7 @@ func (m Model) View() string {
 
 	// Render Control Panel first and measure its actual rendered line height
 	initialControlHeight := clamp(int(float64(contentHeight)*0.40), 8, 12)
-	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, initialControlHeight)
+	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, fadeRemainingSecs, m.fadeLabel, mainWidth, initialControlHeight)
 	actualControlLines := lipgloss.Height(topRight)
 
 	// Scene picker gets the exact remaining height so total rightCol height == contentHeight

@@ -194,7 +194,7 @@ func TestConfigManagerDeviceRooms(t *testing.T) {
 		t.Errorf("Expected reloaded room 'Living Room', got '%s'", room2)
 	}
 
-// Remove room assignment
+	// Remove room assignment
 	if err := mgr2.SetRoom("192.168.1.115", ""); err != nil {
 		t.Fatalf("Failed to clear room: %v", err)
 	}
@@ -256,4 +256,3 @@ func TestConfigManagerPresets(t *testing.T) {
 		t.Errorf("Expected deleted preset to no longer exist")
 	}
 }
-

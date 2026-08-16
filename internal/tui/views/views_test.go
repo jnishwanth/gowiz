@@ -67,7 +67,7 @@ func TestViewsRendering(t *testing.T) {
 	})
 
 	t.Run("RenderControlPanel", func(t *testing.T) {
-		nilDevOutput := RenderControlPanel(nil, false, 0, 40, 20)
+		nilDevOutput := RenderControlPanel(nil, false, 0, 0, "", 40, 20)
 		if !strings.Contains(nilDevOutput, "No active device selected") {
 			t.Errorf("expected no device message when dev is nil")
 		}
@@ -79,21 +79,24 @@ func TestViewsRendering(t *testing.T) {
 		dev.Brightness = 75
 		dev.SceneID = 1 // Ocean scene
 
-		sceneOutput := RenderControlPanel(dev, true, 300, 40, 20)
+		sceneOutput := RenderControlPanel(dev, true, 300, 45, "🌅 Sunrise", 40, 20)
 		if !strings.Contains(sceneOutput, "Reading Nook") || !strings.Contains(sceneOutput, "Library") || !strings.Contains(sceneOutput, "Ocean") || !strings.Contains(sceneOutput, "75%") {
 			t.Errorf("expected custom device alias 'Reading Nook', room 'Library', scene name, and brightness in control panel")
+		}
+		if !strings.Contains(sceneOutput, "Sunrise") {
+			t.Errorf("expected fade badge label 'Sunrise' in rendered control panel output")
 		}
 
 		dev.SceneID = 0
 		dev.Temp = 3000 // White temp mode
-		tempOutput := RenderControlPanel(dev, true, 0, 40, 20)
+		tempOutput := RenderControlPanel(dev, true, 0, 0, "", 40, 20)
 		if !strings.Contains(tempOutput, "3000K") {
 			t.Errorf("expected temp K value in control panel output")
 		}
 
 		dev.Temp = 0
 		dev.RGB = [3]int{255, 0, 128} // RGB mode
-		rgbOutput := RenderControlPanel(dev, true, 0, 40, 20)
+		rgbOutput := RenderControlPanel(dev, true, 0, 0, "", 40, 20)
 		if !strings.Contains(rgbOutput, "255") {
 			t.Errorf("expected RGB values in control panel output")
 		}

@@ -28,6 +28,12 @@ type CommandActionResult struct {
 	ApplyPresetName  string // preset name to apply, if non-empty
 	TargetRoom       string // target room group name for batch room commands, if non-empty
 	TargetIP         string // target bulb IP to add/connect to
+	SetFadeDimming   int    // target dimming level (1-100, or 0 for off fade)
+	SetFadeDuration  int    // duration of smooth transition in seconds
+	SetFadeColorTemp int    // target color temperature in Kelvin (0 if none)
+	FadeTurnOff      bool   // whether to turn off light upon fade completion
+	FadeLabel        string // user-facing label for active fade badge
+	IsFadeCommand    bool   // flag indicating a fade transition request
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -383,6 +389,90 @@ func (r *CommandRegistry) registerDefaults() {
 		return CommandActionResult{StatusMsg: fmt.Sprintf("Invalid timer duration: %s", args[0])}
 	})
 
+	// Smooth Dimming & Transition Fade
+	r.Register("fade", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{StatusMsg: "Usage: :fade <level|off> [durationSec] (e.g. :fade 20 30)"}
+		}
+
+		targetStr := strings.ToLower(args[0])
+		duration := 30
+		if len(args) > 1 {
+			if d, err := strconv.Atoi(args[1]); err == nil && d > 0 {
+				duration = d
+			}
+		}
+
+		if targetStr == "off" || targetStr == "0" {
+			return CommandActionResult{
+				IsFadeCommand:   true,
+				SetFadeDimming:  10,
+				SetFadeDuration: duration,
+				FadeTurnOff:     true,
+				FadeLabel:       "🌆 Fade Off",
+				StatusMsg:       fmt.Sprintf("Fading lights off over %d seconds...", duration),
+			}
+		}
+
+		if level, err := strconv.Atoi(targetStr); err == nil {
+			clamped := wiz.Clamp(level, 10, 100)
+			return CommandActionResult{
+				IsFadeCommand:   true,
+				SetFadeDimming:  clamped,
+				SetFadeDuration: duration,
+				FadeLabel:       fmt.Sprintf("🌆 Fade (%d%%)", clamped),
+				StatusMsg:       fmt.Sprintf("Fading brightness to %d%% over %d seconds...", clamped, duration),
+			}
+		}
+
+		return CommandActionResult{StatusMsg: fmt.Sprintf("Invalid fade level: %s", args[0])}
+	})
+
+	// Sunrise Simulation
+	r.Register("sunrise", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		duration := 60
+		if len(args) > 0 {
+			if d, err := strconv.Atoi(args[0]); err == nil && d > 0 {
+				duration = d
+			}
+		}
+		return CommandActionResult{
+			IsFadeCommand:    true,
+			SetFadeDimming:   100,
+			SetFadeColorTemp: 4200,
+			SetFadeDuration:  duration,
+			FadeLabel:        "🌅 Sunrise",
+			StatusMsg:        fmt.Sprintf("Starting sunrise simulation (%d seconds)...", duration),
+		}
+	})
+
+	// Sunset Simulation & Dynamic Scene Shortcut
+	r.Register("sunset", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) > 0 {
+			duration := 60
+			if d, err := strconv.Atoi(args[0]); err == nil && d > 0 {
+				duration = d
+			}
+			return CommandActionResult{
+				IsFadeCommand:    true,
+				SetFadeDimming:   10,
+				SetFadeColorTemp: 2700,
+				SetFadeDuration:  duration,
+				FadeTurnOff:      true,
+				FadeLabel:        "🌆 Sunset",
+				StatusMsg:        fmt.Sprintf("Starting sunset simulation (%d seconds)...", duration),
+			}
+		}
+		if sc, found := wiz.GetSceneByName("Sunset"); found {
+			params := wiz.NewSceneParams(sc.ID)
+			return CommandActionResult{
+				StatusMsg:   fmt.Sprintf("Scene set: %s", sc.Name),
+				PilotParams: &params,
+			}
+		}
+		return CommandActionResult{StatusMsg: "Scene not found: Sunset"}
+	})
+
 	// Scene Speed
 	r.Register("speed", func(args []string, activeDev *wiz.Device) CommandActionResult {
 		if len(args) == 0 {
@@ -575,7 +665,6 @@ func (r *CommandRegistry) registerDefaults() {
 	// Direct Scene Shortcut Verbs
 	sceneShortcuts := map[string]string{
 		"ocean":      "Ocean",
-		"sunset":     "Sunset",
 		"party":      "Party",
 		"cozy":       "Cozy",
 		"forest":     "Forest",
