@@ -563,4 +563,36 @@ func TestCLIRun(t *testing.T) {
 			t.Errorf("expected server startup message, got: %s", buf.String())
 		}
 	})
+
+	t.Run("Effect_CLI_execution", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+
+		opts := Options{
+			ConfigPath: cfgPath,
+			TargetIP:   "192.168.1.150",
+			Mock:       true,
+			Command:    "flash red 1",
+			Writer:     &buf,
+		}
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected flash effect error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Flashing lights") {
+			t.Errorf("expected flash output, got: %s", buf.String())
+		}
+
+		buf.Reset()
+		opts.Command = "pulse 1"
+		opts.JSONOutput = true
+		err = Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected pulse effect JSON error: %v", err)
+		}
+		if !strings.Contains(buf.String(), `"effect": "pulse"`) {
+			t.Errorf("expected pulse JSON output, got: %s", buf.String())
+		}
+	})
 }

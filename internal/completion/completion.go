@@ -33,8 +33,9 @@ _gowiz_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval --server -s --port --api-key --webhook"
-    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd serve server cat category categories info diag status config recent export import undo help scan quit completion"
+    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd serve server flash pulse strobe rainbow effect cat category categories info diag status config recent export import undo help scan quit completion"
     presets="evening movie night focus work relax party list save delete"
+    effects="flash pulse strobe rainbow"
     categories="nature cozy white party mood dynamic"
     shells="bash zsh fish"
     services="install uninstall status systemd launchd"
@@ -97,6 +98,11 @@ _gowiz() {
         'daemon:Run background circadian schedule sync daemon'
         'service:Manage systemd or launchd background daemon service'
         'serve:Start HTTP REST API server'
+        'flash:Flash smart lights for notification'
+        'pulse:Pulse smart light dimming level'
+        'strobe:Strobe light alert effect'
+        'rainbow:Sweep RGB spectrum hues'
+        'effect:Trigger dynamic lighting effect'
         'cat:Filter scenes by category'
         'info:Display device telemetry diagnostics'
         'config:Display configuration status'

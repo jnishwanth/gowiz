@@ -13,6 +13,7 @@ import (
 	"wiz-tui/internal/completion"
 	"wiz-tui/internal/config"
 	"wiz-tui/internal/daemon"
+	"wiz-tui/internal/effect"
 	"wiz-tui/internal/server"
 	"wiz-tui/internal/service"
 	"wiz-tui/internal/tui"
@@ -614,6 +615,63 @@ func Run(ctx context.Context, opts Options) error {
 				"status":    "ok",
 				"target_ip": targetIPToUse,
 				"message":   msg,
+			})
+		}
+
+		fmt.Fprintln(w, msg)
+		return nil
+	}
+
+	// Handle dynamic light effect execution
+	if result.EffectConfig != nil {
+		targetIPs := []string{}
+		if result.TargetRoom != "" {
+			targets := reg.GetDevicesByRoom(result.TargetRoom)
+			if len(targets) == 0 {
+				return fmt.Errorf("no devices found in room '%s'", result.TargetRoom)
+			}
+			for _, dev := range targets {
+				targetIPs = append(targetIPs, dev.IP)
+			}
+		} else {
+			targetIPToUse := targetIP
+			if result.TargetIP != "" {
+				targetIPToUse = result.TargetIP
+			}
+			if targetIPToUse != "" && targetIPToUse != wiz.FallbackIP {
+				targetIPs = append(targetIPs, targetIPToUse)
+			} else {
+				devices := reg.List()
+				if len(devices) > 0 {
+					targetIPs = append(targetIPs, devices[0].IP)
+				}
+			}
+		}
+
+		if len(targetIPs) == 0 {
+			return fmt.Errorf("no target IP address or room specified for effect execution")
+		}
+
+		errs := effect.Execute(ctx, client, targetIPs, *result.EffectConfig)
+		failedCount := 0
+		for _, err := range errs {
+			if err != nil {
+				failedCount++
+			}
+		}
+
+		msg := result.StatusMsg
+		if msg == "" {
+			msg = fmt.Sprintf("Executed effect %s on %d device(s)", result.EffectConfig.Type, len(targetIPs))
+		}
+
+		if opts.JSONOutput {
+			return printJSON(w, map[string]any{
+				"status":       "ok",
+				"effect":       result.EffectConfig.Type,
+				"device_count": len(targetIPs),
+				"failed_count": failedCount,
+				"message":      msg,
 			})
 		}
 

@@ -11,6 +11,7 @@ import (
 
 	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/config"
+	"wiz-tui/internal/effect"
 	"wiz-tui/internal/tui"
 	"wiz-tui/internal/wiz"
 )
@@ -118,6 +119,7 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/docs", s.wrapFunc(s.handleDocs, false))
 	mux.Handle("/api/v1/docs", s.wrapFunc(s.handleDocs, false))
 	mux.Handle("/api/v1/pilot", s.wrapFunc(s.handlePilot, true))
+	mux.Handle("/api/v1/effects", s.wrapFunc(s.handleEffects, true))
 	mux.Handle("/api/v1/presets", s.wrapFunc(s.handlePresets, true))
 	mux.Handle("/api/v1/circadian", s.wrapFunc(s.handleCircadian, true))
 	mux.Handle("/api/v1/command", s.wrapFunc(s.handleCommand, true))
@@ -335,6 +337,105 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":   "ok",
 		"targetIP": targetIP,
+	})
+}
+
+// EffectRequest defines the JSON structure for triggering dynamic light effects via HTTP POST /api/v1/effects.
+type EffectRequest struct {
+	Type       effect.EffectType `json:"type"`
+	Color      string            `json:"color,omitempty"`
+	Count      int               `json:"count,omitempty"`
+	IntervalMs int               `json:"intervalMs,omitempty"`
+	MinDimming int               `json:"minDimming,omitempty"`
+	MaxDimming int               `json:"maxDimming,omitempty"`
+	IP         string            `json:"ip,omitempty"`
+	Room       string            `json:"room,omitempty"`
+}
+
+func (s *Server) handleEffects(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "ok",
+			"availableEffects": []string{
+				string(effect.EffectFlash),
+				string(effect.EffectPulse),
+				string(effect.EffectStrobe),
+				string(effect.EffectRainbow),
+			},
+			"namedColors": []string{
+				"red", "green", "blue", "yellow", "cyan", "magenta", "purple", "orange", "pink", "white", "alert",
+			},
+		})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req EffectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON payload: %v", err))
+		return
+	}
+
+	cfg := effect.EffectConfig{
+		Type:       req.Type,
+		Color:      req.Color,
+		Count:      req.Count,
+		IntervalMs: req.IntervalMs,
+		MinDimming: req.MinDimming,
+		MaxDimming: req.MaxDimming,
+	}
+
+	targetIPs := []string{}
+	if req.Room != "" {
+		targets := s.cfg.DevRegistry.GetDevicesByRoom(req.Room)
+		if len(targets) == 0 {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found in room %q", req.Room))
+			return
+		}
+		for _, dev := range targets {
+			targetIPs = append(targetIPs, dev.IP)
+		}
+	} else if req.IP != "" {
+		targetIPs = append(targetIPs, req.IP)
+	} else {
+		devices := s.cfg.DevRegistry.List()
+		if len(devices) > 0 {
+			targetIPs = append(targetIPs, devices[0].IP)
+		}
+	}
+
+	if len(targetIPs) == 0 {
+		writeError(w, http.StatusBadRequest, "no target IP or room specified")
+		return
+	}
+
+	errs := effect.Execute(r.Context(), s.cfg.WizClient, targetIPs, cfg)
+	failedCount := 0
+	for _, err := range errs {
+		if err != nil {
+			failedCount++
+		}
+	}
+
+	s.broadcaster.Publish(Event{
+		Type:    EventDeviceUpdated,
+		IP:      strings.Join(targetIPs, ","),
+		Status:  "ok",
+		Payload: cfg,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":      "ok",
+		"effect":      cfg.Type,
+		"targetIPs":   targetIPs,
+		"failedCount": failedCount,
 	})
 }
 

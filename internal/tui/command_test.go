@@ -429,4 +429,31 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("unexpected launchd result: %+v", resLaunchd)
 		}
 	})
+
+	t.Run("Dynamic light effect command dispatch", func(t *testing.T) {
+		resFlash := ExecuteCommand("flash red 3", dev)
+		if resFlash.EffectConfig == nil || resFlash.EffectConfig.Type != "flash" || resFlash.EffectConfig.Color != "red" {
+			t.Errorf("expected flash effect config, got %+v", resFlash.EffectConfig)
+		}
+
+		resPulse := ExecuteCommand("pulse 4", dev)
+		if resPulse.EffectConfig == nil || resPulse.EffectConfig.Type != "pulse" || resPulse.EffectConfig.Count != 4 {
+			t.Errorf("expected pulse effect config count 4, got %+v", resPulse.EffectConfig)
+		}
+
+		resStrobe := ExecuteCommand("strobe white 5", dev)
+		if resStrobe.EffectConfig == nil || resStrobe.EffectConfig.Type != "strobe" || resStrobe.EffectConfig.Color != "white" {
+			t.Errorf("expected strobe effect config, got %+v", resStrobe.EffectConfig)
+		}
+
+		resRainbow := ExecuteCommand("rainbow 6", dev)
+		if resRainbow.EffectConfig == nil || resRainbow.EffectConfig.Type != "rainbow" || resRainbow.EffectConfig.Count != 6 {
+			t.Errorf("expected rainbow effect config, got %+v", resRainbow.EffectConfig)
+		}
+
+		resEffect := ExecuteCommand("effect flash blue 2", dev)
+		if resEffect.EffectConfig == nil || resEffect.EffectConfig.Type != "flash" || resEffect.EffectConfig.Color != "blue" {
+			t.Errorf("expected effect sub-command flash config, got %+v", resEffect.EffectConfig)
+		}
+	})
 }

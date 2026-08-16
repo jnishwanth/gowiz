@@ -736,3 +736,57 @@ func TestServerAuthAndCORS(t *testing.T) {
 		}
 	})
 }
+
+func TestServerEffects(t *testing.T) {
+	srv, _ := setupTestServer(t)
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("GET /api/v1/effects", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/effects")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/effects: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode effects response: %v", err)
+		}
+		if body["status"] != "ok" {
+			t.Errorf("expected status 'ok', got %v", body["status"])
+		}
+	})
+
+	t.Run("POST /api/v1/effects flash", func(t *testing.T) {
+		payload := map[string]any{
+			"type":       "flash",
+			"color":      "red",
+			"count":      1,
+			"intervalMs": 5,
+			"ip":         "192.168.1.50",
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		resp, err := http.Post(ts.URL+"/api/v1/effects", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/effects: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if res["effect"] != "flash" {
+			t.Errorf("expected effect 'flash', got %v", res["effect"])
+		}
+	})
+}

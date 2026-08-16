@@ -8,6 +8,7 @@ import (
 	"time"
 	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/config"
+	"wiz-tui/internal/effect"
 	"wiz-tui/internal/wiz"
 )
 
@@ -23,32 +24,33 @@ type CommandActionResult struct {
 	ListCategories   bool
 	StatusMsg        string
 	PilotParams      *wiz.PilotParams
-	SetSleepTimer    int    // sleep timer in seconds, if > 0
-	NewDeviceName    string // custom device name to set on active device, if non-empty
-	SetDeviceRoom    string // custom room name to set on active device ("CLEAR" to remove), if non-empty
-	SavePresetName   string // custom preset name to save active state under, if non-empty
-	DeletePresetName string // custom preset name to delete, if non-empty
-	ApplyPresetName  string // preset name to apply, if non-empty
-	TargetRoom       string // target room group name for batch room commands, if non-empty
-	TargetIP         string // target bulb IP to add/connect to
-	SetSearchQuery   string // scene filter query to set, if non-empty
-	FocusScenes      bool   // whether to focus scene picker panel
-	SetFadeDimming   int    // target dimming level (1-100, or 0 for off fade)
-	SetFadeDuration  int    // duration of smooth transition in seconds
-	SetFadeColorTemp int    // target color temperature in Kelvin (0 if none)
-	FadeTurnOff      bool   // whether to turn off light upon fade completion
-	FadeLabel        string // user-facing label for active fade badge
-	IsFadeCommand    bool   // flag indicating a fade transition request
-	ShowInfo         bool   // request active device diagnostic info display
-	ExportPath       string // destination path for exporting config
-	ImportPath       string // source path for importing config
-	CompletionShell  string // target shell for generating autocompletion script
-	RunDaemon        bool   // request running background circadian daemon
-	ServiceAction    string // service action: install, uninstall, status, systemd, launchd
-	ServiceType      string // target service type: systemd, launchd, auto
-	ServiceInterval  string // daemon sync interval string (e.g., 1m, 5m)
-	RunServer        bool   // request running HTTP REST API server
-	ServerPort       int    // target port for HTTP REST API server
+	EffectConfig     *effect.EffectConfig // dynamic light effect configuration, if set
+	SetSleepTimer    int                  // sleep timer in seconds, if > 0
+	NewDeviceName    string               // custom device name to set on active device, if non-empty
+	SetDeviceRoom    string               // custom room name to set on active device ("CLEAR" to remove), if non-empty
+	SavePresetName   string               // custom preset name to save active state under, if non-empty
+	DeletePresetName string               // custom preset name to delete, if non-empty
+	ApplyPresetName  string               // preset name to apply, if non-empty
+	TargetRoom       string               // target room group name for batch room commands, if non-empty
+	TargetIP         string               // target bulb IP to add/connect to
+	SetSearchQuery   string               // scene filter query to set, if non-empty
+	FocusScenes      bool                 // whether to focus scene picker panel
+	SetFadeDimming   int                  // target dimming level (1-100, or 0 for off fade)
+	SetFadeDuration  int                  // duration of smooth transition in seconds
+	SetFadeColorTemp int                  // target color temperature in Kelvin (0 if none)
+	FadeTurnOff      bool                 // whether to turn off light upon fade completion
+	FadeLabel        string               // user-facing label for active fade badge
+	IsFadeCommand    bool                 // flag indicating a fade transition request
+	ShowInfo         bool                 // request active device diagnostic info display
+	ExportPath       string               // destination path for exporting config
+	ImportPath       string               // source path for importing config
+	CompletionShell  string               // target shell for generating autocompletion script
+	RunDaemon        bool                 // request running background circadian daemon
+	ServiceAction    string               // service action: install, uninstall, status, systemd, launchd
+	ServiceType      string               // target service type: systemd, launchd, auto
+	ServiceInterval  string               // daemon sync interval string (e.g., 1m, 5m)
+	RunServer        bool                 // request running HTTP REST API server
+	ServerPort       int                  // target port for HTTP REST API server
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -973,4 +975,114 @@ func (r *CommandRegistry) registerDefaults() {
 	}
 	r.Register("serve", serverHandler)
 	r.Register("server", serverHandler)
+
+	// Dynamic Light Effects Handlers
+	flashHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		color := "red"
+		count := 3
+		if len(args) > 0 {
+			color = args[0]
+		}
+		if len(args) > 1 {
+			if c, err := strconv.Atoi(args[1]); err == nil && c > 0 {
+				count = c
+			}
+		}
+		cfg := effect.EffectConfig{
+			Type:       effect.EffectFlash,
+			Color:      color,
+			Count:      count,
+			IntervalMs: 400,
+		}
+		return CommandActionResult{
+			EffectConfig: &cfg,
+			StatusMsg:    fmt.Sprintf("Flashing lights (%s x%d)...", color, count),
+		}
+	}
+	r.Register("flash", flashHandler)
+
+	pulseHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		count := 3
+		if len(args) > 0 {
+			if c, err := strconv.Atoi(args[0]); err == nil && c > 0 {
+				count = c
+			}
+		}
+		cfg := effect.EffectConfig{
+			Type:       effect.EffectPulse,
+			MinDimming: 20,
+			MaxDimming: 100,
+			Count:      count,
+			IntervalMs: 500,
+		}
+		return CommandActionResult{
+			EffectConfig: &cfg,
+			StatusMsg:    fmt.Sprintf("Pulsing light brightness (x%d)...", count),
+		}
+	}
+	r.Register("pulse", pulseHandler)
+
+	strobeHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		color := "white"
+		count := 6
+		if len(args) > 0 {
+			color = args[0]
+		}
+		if len(args) > 1 {
+			if c, err := strconv.Atoi(args[1]); err == nil && c > 0 {
+				count = c
+			}
+		}
+		cfg := effect.EffectConfig{
+			Type:       effect.EffectStrobe,
+			Color:      color,
+			Count:      count,
+			IntervalMs: 150,
+		}
+		return CommandActionResult{
+			EffectConfig: &cfg,
+			StatusMsg:    fmt.Sprintf("Strobe alert effect (%s x%d)...", color, count),
+		}
+	}
+	r.Register("strobe", strobeHandler)
+
+	rainbowHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		count := 6
+		if len(args) > 0 {
+			if c, err := strconv.Atoi(args[0]); err == nil && c > 0 {
+				count = c
+			}
+		}
+		cfg := effect.EffectConfig{
+			Type:       effect.EffectRainbow,
+			Count:      count,
+			IntervalMs: 600,
+		}
+		return CommandActionResult{
+			EffectConfig: &cfg,
+			StatusMsg:    fmt.Sprintf("Rainbow spectrum sweep (%d steps)...", count),
+		}
+	}
+	r.Register("rainbow", rainbowHandler)
+
+	effectHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{StatusMsg: "Usage: :effect <flash|pulse|strobe|rainbow> [args...]"}
+		}
+		effType := strings.ToLower(args[0])
+		subArgs := args[1:]
+		switch effType {
+		case "flash":
+			return flashHandler(subArgs, activeDev)
+		case "pulse":
+			return pulseHandler(subArgs, activeDev)
+		case "strobe":
+			return strobeHandler(subArgs, activeDev)
+		case "rainbow":
+			return rainbowHandler(subArgs, activeDev)
+		default:
+			return CommandActionResult{StatusMsg: fmt.Sprintf("Unknown effect type: %s", effType)}
+		}
+	}
+	r.Register("effect", effectHandler)
 }
