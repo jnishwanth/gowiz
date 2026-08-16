@@ -208,4 +208,76 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected mode ModeNormal after Esc, got %v", m.mode)
 		}
 	})
+
+	t.Run("Enter key action dispatch across panels", func(t *testing.T) {
+		// Panel 3 (Scenes): Pressing Enter dispatches scene pilot command
+		m.activePanel = PanelScenes
+		m.sceneCursor = 0 // First scene (Ocean, ID 1)
+
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd == nil {
+			t.Fatalf("expected dispatch command on Enter in PanelScenes")
+		}
+		msg := cmd()
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+
+		activeDev, _ := m.Registry.GetActive()
+		if activeDev.SceneID != 1 {
+			t.Errorf("expected active scene ID 1, got %d", activeDev.SceneID)
+		}
+
+		// Panel 1 (Devices): Pressing Enter sets active device
+		m.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.200"))
+		m.activePanel = PanelDevices
+		m.deviceCursor = 1 // Second device
+
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		activeDev, _ = m.Registry.GetActive()
+		if activeDev.IP != "192.168.1.200" {
+			t.Errorf("expected active IP 192.168.1.200 after Enter, got %s", activeDev.IP)
+		}
+
+		// Panel 2 (Control): Pressing Enter toggles power state
+		m.activePanel = PanelControl
+		prevState := activeDev.State
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		activeDev, _ = m.Registry.GetActive()
+		if activeDev.State == prevState {
+			t.Errorf("expected power state toggle on Enter in PanelControl")
+		}
+	})
+
+	t.Run("Search mode filtering and cursor bounds clamping", func(t *testing.T) {
+		// Enter search mode with '/'
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		m = updated.(Model)
+		if m.mode != ModeSearch {
+			t.Fatalf("expected ModeSearch, got %v", m.mode)
+		}
+
+		// Type query "Sunset"
+		for _, r := range "Sunset" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		if m.searchQuery != "Sunset" {
+			t.Errorf("expected searchQuery 'Sunset', got %q", m.searchQuery)
+		}
+
+		// Press Enter to confirm search: transitions to ModeNormal and focuses PanelScenes
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if m.mode != ModeNormal || m.activePanel != PanelScenes {
+			t.Errorf("expected ModeNormal and PanelScenes focus after Enter in search, got mode=%v panel=%v", m.mode, m.activePanel)
+		}
+	})
 }

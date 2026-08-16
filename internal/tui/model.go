@@ -269,6 +269,30 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		m.mode = ModeHelp
 		return m, nil
 
+	case "enter":
+		switch m.activePanel {
+		case PanelScenes:
+			scenes := wiz.FilterScenes(m.searchQuery)
+			if m.sceneCursor >= 0 && m.sceneCursor < len(scenes) {
+				scene := scenes[m.sceneCursor]
+				m.setStatusMessage(fmt.Sprintf("Sending Scene: %s...", scene.Name))
+				return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
+			}
+		case PanelDevices:
+			devices := m.Registry.List()
+			if m.deviceCursor >= 0 && m.deviceCursor < len(devices) {
+				dev := devices[m.deviceCursor]
+				m.Registry.SetActive(dev.IP)
+				m.setStatusMessage(fmt.Sprintf("Active bulb set to %s", dev.IP))
+			}
+		case PanelControl:
+			active, ok := m.Registry.GetActive()
+			if ok {
+				return m, m.dispatchPilotCmd(wiz.NewPowerParams(!active.State))
+			}
+		}
+		return m, nil
+
 	case ":":
 		m.mode = ModeCommand
 		m.commandBuffer = ""
@@ -540,21 +564,39 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 
 func (m Model) handleSearchKey(key string) (Model, tea.Cmd) {
 	switch key {
-	case "enter", "esc":
+	case "enter":
 		m.mode = ModeNormal
+		m.activePanel = PanelScenes
+		m.clampSceneCursor()
+		return m, nil
+
+	case "esc":
+		m.mode = ModeNormal
+		m.clampSceneCursor()
 		return m, nil
 
 	case "backspace":
 		if len(m.searchQuery) > 0 {
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 		}
+		m.clampSceneCursor()
 		return m, nil
 
 	default:
 		if len(key) == 1 {
 			m.searchQuery += key
 		}
+		m.clampSceneCursor()
 		return m, nil
+	}
+}
+
+func (m *Model) clampSceneCursor() {
+	scenes := wiz.FilterScenes(m.searchQuery)
+	if len(scenes) == 0 {
+		m.sceneCursor = 0
+	} else if m.sceneCursor >= len(scenes) {
+		m.sceneCursor = len(scenes) - 1
 	}
 }
 
