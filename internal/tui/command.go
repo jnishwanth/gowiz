@@ -5,24 +5,29 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"wiz-tui/internal/config"
 	"wiz-tui/internal/wiz"
 )
 
 // CommandActionResult encapsulates the outcome of executing a TUI command line verb.
 type CommandActionResult struct {
-	Quit          bool
-	Help          bool
-	Scan          bool
-	Undo          bool
-	ConfigInfo    bool
-	ShowRecent    bool
-	StatusMsg     string
-	PilotParams   *wiz.PilotParams
-	SetSleepTimer int    // sleep timer in seconds, if > 0
-	NewDeviceName string // custom device name to set on active device, if non-empty
-	SetDeviceRoom string // custom room name to set on active device ("CLEAR" to remove), if non-empty
-	TargetRoom    string // target room group name for batch room commands, if non-empty
-	TargetIP      string // target bulb IP to add/connect to
+	Quit             bool
+	Help             bool
+	Scan             bool
+	Undo             bool
+	ConfigInfo       bool
+	ShowRecent       bool
+	ListPresets      bool
+	StatusMsg        string
+	PilotParams      *wiz.PilotParams
+	SetSleepTimer    int    // sleep timer in seconds, if > 0
+	NewDeviceName    string // custom device name to set on active device, if non-empty
+	SetDeviceRoom    string // custom room name to set on active device ("CLEAR" to remove), if non-empty
+	SavePresetName   string // custom preset name to save active state under, if non-empty
+	DeletePresetName string // custom preset name to delete, if non-empty
+	ApplyPresetName  string // preset name to apply, if non-empty
+	TargetRoom       string // target room group name for batch room commands, if non-empty
+	TargetIP         string // target bulb IP to add/connect to
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -95,6 +100,84 @@ func ParseHexColor(hexStr string) (int, int, int, error) {
 	b := int(val & 0xFF)
 
 	return r, g, b, nil
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+// BuiltinPresets provides standard out-of-the-box lighting ambiance presets.
+var BuiltinPresets = map[string]config.Preset{
+	"evening": {
+		Temp:    intPtr(2700),
+		Dimming: intPtr(60),
+	},
+	"movie": {
+		SceneID: intPtr(6), // Cozy
+		Dimming: intPtr(20),
+	},
+	"night": {
+		SceneID: intPtr(14), // Night light
+		Dimming: intPtr(10),
+	},
+	"focus": {
+		Temp:    intPtr(6500),
+		Dimming: intPtr(100),
+	},
+	"work": {
+		Temp:    intPtr(6500),
+		Dimming: intPtr(100),
+	},
+	"relax": {
+		SceneID: intPtr(9), // Relax
+		Dimming: intPtr(50),
+	},
+	"party": {
+		SceneID: intPtr(4), // Party
+		Dimming: intPtr(100),
+	},
+}
+
+// PresetToPilotParams converts a config.Preset into a wiz.PilotParams payload.
+func PresetToPilotParams(p config.Preset) wiz.PilotParams {
+	st := true
+	params := wiz.PilotParams{
+		State:   &st,
+		Dimming: p.Dimming,
+		Temp:    p.Temp,
+		R:       p.R,
+		G:       p.G,
+		B:       p.B,
+		SceneID: p.SceneID,
+		Speed:   p.Speed,
+	}
+	return params
+}
+
+// PresetFromDevice constructs a config.Preset snapshot from an active wiz.Device state.
+func PresetFromDevice(dev *wiz.Device) config.Preset {
+	p := config.Preset{}
+	if dev == nil {
+		return p
+	}
+	dim := dev.Brightness
+	p.Dimming = &dim
+
+	if dev.SceneID > 0 {
+		sc := dev.SceneID
+		p.SceneID = &sc
+		if dev.Speed > 0 {
+			sp := dev.Speed
+			p.Speed = &sp
+		}
+	} else if dev.Temp > 0 {
+		t := dev.Temp
+		p.Temp = &t
+	} else {
+		r, g, b := dev.RGB[0], dev.RGB[1], dev.RGB[2]
+		p.R, p.G, p.B = &r, &g, &b
+	}
+	return p
 }
 
 func (r *CommandRegistry) registerDefaults() {
@@ -423,7 +506,7 @@ func (r *CommandRegistry) registerDefaults() {
 			subCmdStr := strings.Join(args[subIdx:], " ")
 			subRes := r.Execute(subCmdStr, activeDev)
 			subRes.TargetRoom = roomName
-			if subRes.PilotParams != nil {
+			if subRes.PilotParams != nil || subRes.ApplyPresetName != "" {
 				subRes.StatusMsg = fmt.Sprintf("Group command '%s' sent to room '%s'", subCmdStr, roomName)
 			}
 			return subRes
@@ -436,6 +519,58 @@ func (r *CommandRegistry) registerDefaults() {
 		}
 	}
 	r.Register("group", groupHandler)
+
+	// Preset Management & Activation Verbs
+	presetHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		if len(args) == 0 {
+			return CommandActionResult{ListPresets: true}
+		}
+
+		sub := strings.ToLower(args[0])
+		if sub == "list" {
+			return CommandActionResult{ListPresets: true}
+		}
+
+		if sub == "save" {
+			if len(args) < 2 {
+				return CommandActionResult{StatusMsg: "Usage: :preset save <name>"}
+			}
+			presetName := strings.ToLower(strings.Join(args[1:], "_"))
+			return CommandActionResult{
+				SavePresetName: presetName,
+				StatusMsg:      fmt.Sprintf("Saving current state as preset '%s'...", presetName),
+			}
+		}
+
+		if sub == "delete" || sub == "rm" || sub == "remove" {
+			if len(args) < 2 {
+				return CommandActionResult{StatusMsg: "Usage: :preset delete <name>"}
+			}
+			presetName := strings.ToLower(strings.Join(args[1:], "_"))
+			return CommandActionResult{
+				DeletePresetName: presetName,
+				StatusMsg:        fmt.Sprintf("Deleting preset '%s'...", presetName),
+			}
+		}
+
+		presetName := strings.ToLower(strings.Join(args, "_"))
+		if bp, found := BuiltinPresets[presetName]; found {
+			params := PresetToPilotParams(bp)
+			return CommandActionResult{
+				StatusMsg:   fmt.Sprintf("Applied preset '%s'", presetName),
+				PilotParams: &params,
+			}
+		}
+
+		return CommandActionResult{
+			ApplyPresetName: presetName,
+			StatusMsg:       fmt.Sprintf("Applying preset '%s'...", presetName),
+		}
+	}
+	r.Register("preset", presetHandler)
+	r.Register("presets", func(args []string, activeDev *wiz.Device) CommandActionResult {
+		return CommandActionResult{ListPresets: true}
+	})
 
 	// Direct Scene Shortcut Verbs
 	sceneShortcuts := map[string]string{

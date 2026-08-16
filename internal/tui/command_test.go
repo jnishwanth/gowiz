@@ -183,6 +183,43 @@ func TestCommandRegistryVerbs(t *testing.T) {
 		}
 	})
 
+	t.Run("Preset command dispatches", func(t *testing.T) {
+		resList := ExecuteCommand("preset list", dev)
+		if !resList.ListPresets {
+			t.Errorf("expected ListPresets true for :preset list")
+		}
+
+		resPresets := ExecuteCommand("presets", dev)
+		if !resPresets.ListPresets {
+			t.Errorf("expected ListPresets true for :presets")
+		}
+
+		resSave := ExecuteCommand("preset save cozy_night", dev)
+		if resSave.SavePresetName != "cozy_night" {
+			t.Errorf("expected SavePresetName 'cozy_night', got '%s'", resSave.SavePresetName)
+		}
+
+		resDelete := ExecuteCommand("preset delete cozy_night", dev)
+		if resDelete.DeletePresetName != "cozy_night" {
+			t.Errorf("expected DeletePresetName 'cozy_night', got '%s'", resDelete.DeletePresetName)
+		}
+
+		resEvening := ExecuteCommand("preset evening", dev)
+		if resEvening.PilotParams == nil || *resEvening.PilotParams.Temp != 2700 || *resEvening.PilotParams.Dimming != 60 {
+			t.Errorf("expected 2700K 60%% dimming for built-in evening preset")
+		}
+
+		resCustom := ExecuteCommand("preset my_custom_mode", dev)
+		if resCustom.ApplyPresetName != "my_custom_mode" {
+			t.Errorf("expected ApplyPresetName 'my_custom_mode', got '%s'", resCustom.ApplyPresetName)
+		}
+
+		resGroupPreset := ExecuteCommand("group Living Room preset evening", dev)
+		if resGroupPreset.TargetRoom != "Living Room" || resGroupPreset.PilotParams == nil {
+			t.Errorf("expected TargetRoom 'Living Room' with PilotParams for group preset command")
+		}
+	})
+
 	t.Run("Custom verb registration", func(t *testing.T) {
 		reg := NewCommandRegistry()
 		reg.Register("custom", func(args []string, activeDev *wiz.Device) CommandActionResult {

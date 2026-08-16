@@ -194,7 +194,7 @@ func TestConfigManagerDeviceRooms(t *testing.T) {
 		t.Errorf("Expected reloaded room 'Living Room', got '%s'", room2)
 	}
 
-	// Remove room assignment
+// Remove room assignment
 	if err := mgr2.SetRoom("192.168.1.115", ""); err != nil {
 		t.Fatalf("Failed to clear room: %v", err)
 	}
@@ -203,3 +203,57 @@ func TestConfigManagerDeviceRooms(t *testing.T) {
 		t.Errorf("Expected room assignment to be deleted when passed empty string")
 	}
 }
+
+func TestConfigManagerPresets(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "presets_test.json")
+
+	mgr := config.NewManager(cfgPath)
+
+	dim := 50
+	temp := 3000
+	preset := config.Preset{
+		Dimming: &dim,
+		Temp:    &temp,
+	}
+
+	err := mgr.SetPreset("CozyWarm", preset)
+	if err != nil {
+		t.Fatalf("Failed to save preset: %v", err)
+	}
+
+	p, found := mgr.GetPreset("cozywarm")
+	if !found {
+		t.Fatalf("Expected preset 'cozywarm' to be found")
+	}
+	if p.Dimming == nil || *p.Dimming != 50 || p.Temp == nil || *p.Temp != 3000 {
+		t.Errorf("Unexpected preset values: %+v", p)
+	}
+
+	all := mgr.GetPresets()
+	if len(all) != 1 || all["cozywarm"].Dimming == nil {
+		t.Errorf("Expected 1 stored preset in map, got %d", len(all))
+	}
+
+	// Verify persistence across new manager instance
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+
+	p2, found2 := mgr2.GetPreset("CozyWarm")
+	if !found2 || p2.Dimming == nil || *p2.Dimming != 50 {
+		t.Errorf("Expected reloaded preset 'cozywarm' with dimming 50, got: %+v", p2)
+	}
+
+	// Delete preset
+	if err := mgr2.DeletePreset("cozywarm"); err != nil {
+		t.Fatalf("Failed to delete preset: %v", err)
+	}
+
+	_, foundDeleted := mgr2.GetPreset("cozywarm")
+	if foundDeleted {
+		t.Errorf("Expected deleted preset to no longer exist")
+	}
+}
+

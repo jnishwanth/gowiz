@@ -591,6 +591,85 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if res.ListPresets {
+			var list []string
+			for k := range BuiltinPresets {
+				list = append(list, k+" [builtin]")
+			}
+			if m.configManager != nil {
+				customs := m.configManager.GetPresets()
+				for k := range customs {
+					list = append(list, k+" [custom]")
+				}
+			}
+			if len(list) == 0 {
+				m.setStatusMessage("No presets defined.")
+			} else {
+				m.setStatusMessage(fmt.Sprintf("Presets (%d): %s", len(list), strings.Join(list, ", ")))
+			}
+			return m, nil
+		}
+
+		if res.SavePresetName != "" && activeDev != nil {
+			preset := PresetFromDevice(activeDev)
+			if m.configManager != nil {
+				_ = m.configManager.SetPreset(res.SavePresetName, preset)
+				m.setStatusMessage(fmt.Sprintf("Saved current state as preset '%s'", res.SavePresetName))
+			} else {
+				m.setStatusMessage("Config manager unavailable; preset not saved.")
+			}
+			return m, nil
+		}
+
+		if res.DeletePresetName != "" {
+			if m.configManager != nil {
+				_ = m.configManager.DeletePreset(res.DeletePresetName)
+				m.setStatusMessage(fmt.Sprintf("Deleted preset '%s'", res.DeletePresetName))
+			} else {
+				m.setStatusMessage("Config manager unavailable; preset not deleted.")
+			}
+			return m, nil
+		}
+
+		if res.ApplyPresetName != "" {
+			var params wiz.PilotParams
+			found := false
+
+			if m.configManager != nil {
+				if cp, ok := m.configManager.GetPreset(res.ApplyPresetName); ok {
+					params = PresetToPilotParams(cp)
+					found = true
+				}
+			}
+			if !found {
+				if bp, ok := BuiltinPresets[res.ApplyPresetName]; ok {
+					params = PresetToPilotParams(bp)
+					found = true
+				}
+			}
+
+			if !found {
+				m.setStatusMessage(fmt.Sprintf("Preset not found: '%s'", res.ApplyPresetName))
+				return m, nil
+			}
+
+			targets := m.Registry.GetSelectedOrActive()
+			if res.TargetRoom != "" {
+				targets = m.Registry.GetDevicesByRoom(res.TargetRoom)
+				if len(targets) == 0 {
+					m.setStatusMessage(fmt.Sprintf("No devices found in room '%s'", res.TargetRoom))
+					return m, nil
+				}
+			}
+
+			if res.StatusMsg != "" {
+				m.setStatusMessage(res.StatusMsg)
+			} else {
+				m.setStatusMessage(fmt.Sprintf("Activated preset '%s'", res.ApplyPresetName))
+			}
+			return m, m.dispatchPilotCmdToDevices(targets, params)
+		}
+
 		if res.TargetIP != "" {
 			m.Registry.AddOrUpdate(wiz.NewDevice(res.TargetIP))
 			m.setActiveDevice(res.TargetIP)

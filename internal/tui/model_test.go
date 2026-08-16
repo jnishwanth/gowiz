@@ -909,4 +909,84 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected restored room 'Living Room', got '%s'", rDev10.Room)
 		}
 	})
+
+	t.Run("Preset management and activation in Model", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "model_preset_test.json")
+
+		mockClient := wiz.NewMockClient()
+		m := NewModelWithConfig(mockClient, "192.168.1.100", cfgPath)
+
+		// Set active dev state to 45% dimming, 3000K temp
+		activeDev, _ := m.Registry.GetActive()
+		activeDev.Brightness = 45
+		activeDev.Temp = 3000
+
+		// Save current state as preset 'evening_relax'
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "preset save evening_relax" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		if !strings.Contains(m.statusMessage, "Saved") {
+			t.Errorf("expected status message for saved preset, got %q", m.statusMessage)
+		}
+
+		// Execute :preset list command
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "preset list" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		if !strings.Contains(m.statusMessage, "Presets") || !strings.Contains(m.statusMessage, "evening_relax") {
+			t.Errorf("expected status message listing presets including evening_relax, got %q", m.statusMessage)
+		}
+
+		// Mutate device state
+		activeDev.Brightness = 100
+		activeDev.Temp = 6500
+
+		// Apply custom preset 'evening_relax'
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "preset evening_relax" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+
+		activeDev, _ = m.Registry.GetActive()
+		if activeDev.Brightness != 45 || activeDev.Temp != 3000 {
+			t.Errorf("expected restored state 45%% dimming and 3000K temp from custom preset, got dim %d, temp %d", activeDev.Brightness, activeDev.Temp)
+		}
+
+		// Delete preset 'evening_relax'
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "preset delete evening_relax" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+
+		if !strings.Contains(m.statusMessage, "Deleted") {
+			t.Errorf("expected status message for deleted preset, got %q", m.statusMessage)
+		}
+	})
 }
+

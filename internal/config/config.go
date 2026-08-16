@@ -4,13 +4,26 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
+
+// Preset stores a reusable lighting configuration snapshot (dimming, color temp, RGB, or scene).
+type Preset struct {
+	Dimming *int `json:"dimming,omitempty"`
+	Temp    *int `json:"temp,omitempty"`
+	R       *int `json:"r,omitempty"`
+	G       *int `json:"g,omitempty"`
+	B       *int `json:"b,omitempty"`
+	SceneID *int `json:"scene_id,omitempty"`
+	Speed   *int `json:"speed,omitempty"`
+}
 
 // Config represents persistent user settings and custom bulb aliases.
 type Config struct {
 	DeviceAliases map[string]string `json:"device_aliases"`
 	DeviceRooms   map[string]string `json:"device_rooms,omitempty"`
+	Presets       map[string]Preset `json:"presets,omitempty"`
 	LastActiveIP  string            `json:"last_active_ip,omitempty"`
 	RecentIPs     []string          `json:"recent_ips,omitempty"`
 	AutoScan      bool              `json:"auto_scan"`
@@ -28,6 +41,7 @@ func DefaultConfig() Config {
 	return Config{
 		DeviceAliases: make(map[string]string),
 		DeviceRooms:   make(map[string]string),
+		Presets:       make(map[string]Preset),
 		RecentIPs:     make([]string, 0),
 		AutoScan:      true,
 	}
@@ -83,6 +97,9 @@ func (m *Manager) Load() error {
 	if cfg.DeviceRooms == nil {
 		cfg.DeviceRooms = make(map[string]string)
 	}
+	if cfg.Presets == nil {
+		cfg.Presets = make(map[string]Preset)
+	}
 	m.cfg = cfg
 	return nil
 }
@@ -120,12 +137,18 @@ func (m *Manager) GetConfig() Config {
 		roomsCopy[k] = v
 	}
 
+	presetsCopy := make(map[string]Preset)
+	for k, v := range m.cfg.Presets {
+		presetsCopy[k] = v
+	}
+
 	recentCopy := make([]string, len(m.cfg.RecentIPs))
 	copy(recentCopy, m.cfg.RecentIPs)
 
 	return Config{
 		DeviceAliases: aliasesCopy,
 		DeviceRooms:   roomsCopy,
+		Presets:       presetsCopy,
 		LastActiveIP:  m.cfg.LastActiveIP,
 		RecentIPs:     recentCopy,
 		AutoScan:      m.cfg.AutoScan,
@@ -235,3 +258,52 @@ func (m *Manager) GetRoom(identifier string) (string, bool) {
 	room, found := m.cfg.DeviceRooms[identifier]
 	return room, found
 }
+
+// SetPreset stores a custom lighting preset by name and saves to disk.
+func (m *Manager) SetPreset(name string, preset Preset) error {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return nil
+	}
+	m.mu.Lock()
+	if m.cfg.Presets == nil {
+		m.cfg.Presets = make(map[string]Preset)
+	}
+	m.cfg.Presets[name] = preset
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// DeletePreset removes a custom lighting preset by name and saves to disk.
+func (m *Manager) DeletePreset(name string) error {
+	name = strings.ToLower(strings.TrimSpace(name))
+	m.mu.Lock()
+	if m.cfg.Presets != nil {
+		delete(m.cfg.Presets, name)
+	}
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// GetPreset retrieves a custom lighting preset by name, if present.
+func (m *Manager) GetPreset(name string) (Preset, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cfg.Presets == nil {
+		return Preset{}, false
+	}
+	p, found := m.cfg.Presets[strings.ToLower(strings.TrimSpace(name))]
+	return p, found
+}
+
+// GetPresets returns a copy of all stored custom lighting presets.
+func (m *Manager) GetPresets() map[string]Preset {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	presetsCopy := make(map[string]Preset)
+	for k, v := range m.cfg.Presets {
+		presetsCopy[k] = v
+	}
+	return presetsCopy
+}
+
