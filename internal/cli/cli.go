@@ -31,6 +31,7 @@ type Options struct {
 	DaemonInterval time.Duration
 	Server         bool
 	ServerPort     int
+	APIKey         string
 	WebhookURL     string
 	Writer         io.Writer
 }
@@ -76,6 +77,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		srv := server.NewServer(server.Config{
 			Port:       port,
+			APIKey:     opts.APIKey,
 			WebhookURL: opts.WebhookURL,
 			WizClient:  client,
 			ConfigMgr:  cfgMgr,
@@ -138,6 +140,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		srv := server.NewServer(server.Config{
 			Port:        port,
+			APIKey:      opts.APIKey,
 			WebhookURL:  opts.WebhookURL,
 			WizClient:   client,
 			ConfigMgr:   cfgMgr,

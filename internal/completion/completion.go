@@ -32,7 +32,7 @@ _gowiz_completions() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval --server -s --port"
+    opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval --server -s --port --api-key --webhook"
     verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd serve server cat category categories info diag status config recent export import undo help scan quit completion"
     presets="evening movie night focus work relax party list save delete"
     categories="nature cozy white party mood dynamic"
@@ -118,6 +118,7 @@ _gowiz() {
         '--server[Run in HTTP REST API server mode]'
         '-s[Run in HTTP REST API server mode]'
         '--port[Port for HTTP REST API server]:port:'
+        '--api-key[API key for securing HTTP REST API server]:key:'
         '--version[Print version information]'
         '-v[Print version information]'
         '--help[Show help message]'
@@ -171,6 +172,7 @@ complete -c gowiz -l once -d "Run a single circadian sync pass"
 complete -c gowiz -l interval -d "Sync interval duration" -r
 complete -c gowiz -l server -s s -d "Run in HTTP REST API server mode"
 complete -c gowiz -l port -d "Port for HTTP REST API server" -r
+complete -c gowiz -l api-key -d "API key for securing HTTP REST API server" -r
 
 # Commands
 complete -c gowiz -n "__fish_use_subcommand" -a on -d "Turn smart light on"

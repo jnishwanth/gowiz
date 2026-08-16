@@ -19,6 +19,7 @@ import (
 type Config struct {
 	Port        int
 	Host        string
+	APIKey      string
 	WebhookURL  string
 	WizClient   wiz.Client
 	ConfigMgr   *config.Manager
@@ -69,22 +70,59 @@ func (s *Server) ListenAddr() string {
 	return fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 }
 
+func (s *Server) wrap(handler http.Handler, requireAuth bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type, Accept")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if requireAuth && s.cfg.APIKey != "" {
+			key := r.Header.Get("X-API-Key")
+			if key == "" {
+				authHeader := r.Header.Get("Authorization")
+				if strings.HasPrefix(authHeader, "Bearer ") {
+					key = strings.TrimPrefix(authHeader, "Bearer ")
+				}
+			}
+			if key == "" {
+				key = r.URL.Query().Get("api_key")
+			}
+
+			if key != s.cfg.APIKey {
+				writeError(w, http.StatusUnauthorized, "unauthorized: invalid or missing API key")
+				return
+			}
+		}
+
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) wrapFunc(handler http.HandlerFunc, requireAuth bool) http.Handler {
+	return s.wrap(http.HandlerFunc(handler), requireAuth)
+}
+
 // Router configures and returns the HTTP request handler mux.
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/api/v1/health", s.handleHealth)
-	mux.HandleFunc("/api/v1/devices", s.handleDevices)
-	mux.HandleFunc("/api/v1/rooms", s.handleRooms)
-	mux.HandleFunc("/api/v1/openapi.json", s.handleOpenAPI)
-	mux.HandleFunc("/docs", s.handleDocs)
-	mux.HandleFunc("/api/v1/docs", s.handleDocs)
-	mux.HandleFunc("/api/v1/pilot", s.handlePilot)
-	mux.HandleFunc("/api/v1/presets", s.handlePresets)
-	mux.HandleFunc("/api/v1/circadian", s.handleCircadian)
-	mux.HandleFunc("/api/v1/command", s.handleCommand)
-	mux.Handle("/events", s.broadcaster)
-	mux.Handle("/api/v1/events", s.broadcaster)
+	mux.Handle("/health", s.wrapFunc(s.handleHealth, false))
+	mux.Handle("/api/v1/health", s.wrapFunc(s.handleHealth, false))
+	mux.Handle("/api/v1/devices", s.wrapFunc(s.handleDevices, true))
+	mux.Handle("/api/v1/rooms", s.wrapFunc(s.handleRooms, true))
+	mux.Handle("/api/v1/openapi.json", s.wrapFunc(s.handleOpenAPI, false))
+	mux.Handle("/docs", s.wrapFunc(s.handleDocs, false))
+	mux.Handle("/api/v1/docs", s.wrapFunc(s.handleDocs, false))
+	mux.Handle("/api/v1/pilot", s.wrapFunc(s.handlePilot, true))
+	mux.Handle("/api/v1/presets", s.wrapFunc(s.handlePresets, true))
+	mux.Handle("/api/v1/circadian", s.wrapFunc(s.handleCircadian, true))
+	mux.Handle("/api/v1/command", s.wrapFunc(s.handleCommand, true))
+	mux.Handle("/events", s.wrap(s.broadcaster, true))
+	mux.Handle("/api/v1/events", s.wrap(s.broadcaster, true))
 	return mux
 }
 
@@ -155,6 +193,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"recentCount":         recentCount,
 		"presetsCount":        presetsCount,
 		"configPath":          cfgPath,
+		"apiKeyProtected":     s.cfg.APIKey != "",
 		"sseSubscribers":      subscribers,
 		"webhookURL":          s.broadcaster.WebhookURL(),
 		"webhookEventsSent":   webhookSent,

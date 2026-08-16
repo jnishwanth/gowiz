@@ -611,3 +611,128 @@ func TestServerDocs(t *testing.T) {
 		}
 	}
 }
+
+func TestServerAuthAndCORS(t *testing.T) {
+	cfgMgr := config.NewManager(t.TempDir() + "/config.json")
+	reg := wiz.NewDeviceRegistry()
+	reg.AddOrUpdate(wiz.NewDevice("192.168.1.50"))
+
+	srv := NewServer(Config{
+		Port:        8889,
+		Host:        "127.0.0.1",
+		APIKey:      "secret-key-123",
+		WizClient:   wiz.NewMockClient(),
+		ConfigMgr:   cfgMgr,
+		DevRegistry: reg,
+	})
+	ts := httptest.NewServer(srv.Router())
+	defer ts.Close()
+
+	t.Run("CORS preflight OPTIONS", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodOptions, ts.URL+"/api/v1/devices", nil)
+		if err != nil {
+			t.Fatalf("failed to create OPTIONS request: %v", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed OPTIONS request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNoContent {
+			t.Errorf("expected status 204 No Content for OPTIONS, got %d", resp.StatusCode)
+		}
+		if resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+			t.Errorf("expected CORS header Access-Control-Allow-Origin: *, got %q", resp.Header.Get("Access-Control-Allow-Origin"))
+		}
+		if !bytes.Contains([]byte(resp.Header.Get("Access-Control-Allow-Headers")), []byte("X-API-Key")) {
+			t.Errorf("expected X-API-Key in Access-Control-Allow-Headers, got %q", resp.Header.Get("Access-Control-Allow-Headers"))
+		}
+	})
+
+	t.Run("Public /health with apiKeyProtected status", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/health")
+		if err != nil {
+			t.Fatalf("failed GET /health: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200 for health, got %d", resp.StatusCode)
+		}
+
+		var data map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode health JSON: %v", err)
+		}
+		if data["apiKeyProtected"] != true {
+			t.Errorf("expected apiKeyProtected: true, got %v", data["apiKeyProtected"])
+		}
+	})
+
+	t.Run("Unauthorized request without API Key", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/devices")
+		if err != nil {
+			t.Fatalf("failed GET /api/v1/devices: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected status 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("Unauthorized request with invalid API Key", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/devices", nil)
+		req.Header.Set("X-API-Key", "wrong-key")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed GET with invalid key: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected status 401 Unauthorized, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("Authorized request with X-API-Key header", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/devices", nil)
+		req.Header.Set("X-API-Key", "secret-key-123")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed GET with X-API-Key: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200 OK, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("Authorized request with Authorization Bearer header", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/devices", nil)
+		req.Header.Set("Authorization", "Bearer secret-key-123")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed GET with Bearer token: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200 OK, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("Authorized request with api_key query parameter", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/devices?api_key=secret-key-123")
+		if err != nil {
+			t.Fatalf("failed GET with query param: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200 OK, got %d", resp.StatusCode)
+		}
+	})
+}
