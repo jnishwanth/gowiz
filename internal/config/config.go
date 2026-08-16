@@ -144,3 +144,22 @@ func (m *Manager) GetAlias(identifier string) (string, bool) {
 	alias, found := m.cfg.DeviceAliases[identifier]
 	return alias, found
 }
+
+// SetLastActiveIP updates and persists the last active device IP address.
+func (m *Manager) SetLastActiveIP(ip string) error {
+	m.mu.Lock()
+	if m.cfg.LastActiveIP == ip {
+		m.mu.Unlock()
+		return nil
+	}
+	m.cfg.LastActiveIP = ip
+	m.mu.Unlock()
+	return m.Save()
+}
+
+// GetLastActiveIP retrieves the last active bulb IP address from config.
+func (m *Manager) GetLastActiveIP() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg.LastActiveIP
+}

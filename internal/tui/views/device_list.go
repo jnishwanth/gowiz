@@ -58,13 +58,21 @@ func RenderDeviceList(reg *wiz.DeviceRegistry, deviceCursor int, isFocused bool,
 				checkbox = styles.StatusWarning.Render("[✓]")
 			}
 
-			ipText := dev.IP
-			if dev.IsFallback && innerWidth > 22 {
-				ipText += " (FB)"
+			displayLabel := dev.IP
+			defaultName := fmt.Sprintf("WiZ Light (%s)", dev.IP)
+			defaultFallbackName := fmt.Sprintf("WiZ Light (%s) [Fallback]", dev.IP)
+			if dev.Name != "" && dev.Name != defaultName && dev.Name != defaultFallbackName {
+				if innerWidth > 28 {
+					displayLabel = fmt.Sprintf("%s (%s)", dev.Name, dev.IP)
+				} else {
+					displayLabel = dev.Name
+				}
+			} else if dev.IsFallback && innerWidth > 22 {
+				displayLabel += " (FB)"
 			}
 
-			ipTruncated := lipgloss.NewStyle().MaxWidth(max(innerWidth-12, 8)).Render(ipText)
-			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, ipTruncated)
+			labelTruncated := lipgloss.NewStyle().MaxWidth(max(innerWidth-12, 8)).Render(displayLabel)
+			line := fmt.Sprintf("%s %s %d.%s", checkbox, statusDot, i+1, labelTruncated)
 
 			if isCursor {
 				line = styles.SelectedItemStyle.Render("▸ " + line + " ↵")

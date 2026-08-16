@@ -102,3 +102,28 @@ func TestDefaultPathFallback(t *testing.T) {
 		t.Errorf("DefaultPath returned empty string")
 	}
 }
+
+func TestConfigManagerLastActiveIP(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "last_active_test.json")
+
+	mgr := config.NewManager(cfgPath)
+	err := mgr.SetLastActiveIP("192.168.1.88")
+	if err != nil {
+		t.Fatalf("Failed to set last active IP: %v", err)
+	}
+
+	if mgr.GetLastActiveIP() != "192.168.1.88" {
+		t.Errorf("Expected GetLastActiveIP '192.168.1.88', got '%s'", mgr.GetLastActiveIP())
+	}
+
+	// Reload in a new manager
+	mgr2 := config.NewManager(cfgPath)
+	if err := mgr2.Load(); err != nil {
+		t.Fatalf("Failed to reload config: %v", err)
+	}
+
+	if mgr2.GetLastActiveIP() != "192.168.1.88" {
+		t.Errorf("Expected reloaded LastActiveIP '192.168.1.88', got '%s'", mgr2.GetLastActiveIP())
+	}
+}

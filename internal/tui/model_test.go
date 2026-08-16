@@ -789,5 +789,17 @@ func TestTUIStateSynchronization(t *testing.T) {
 		if !ok || restoredDev.Name != "Office Ambient Light" {
 			t.Errorf("expected restored device name 'Office Ambient Light' from persistent config, got %q", restoredDev.Name)
 		}
+
+		// Test automatic restoration of LastActiveIP when launching without initial IP flag
+		mCfg.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.199"))
+		mCfg.activePanel = PanelDevices
+		mCfg.deviceCursor = 1
+		mCfg.setActiveDevice("192.168.1.199")
+
+		mAutoRestored := NewModelWithConfig(mockClient, "", cfgPath)
+		autoActiveDev, ok := mAutoRestored.Registry.GetActive()
+		if !ok || autoActiveDev.IP != "192.168.1.199" {
+			t.Errorf("expected auto-restored active IP '192.168.1.199', got %v", autoActiveDev)
+		}
 	})
 }

@@ -41,9 +41,27 @@ func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) 
 	reg := wiz.NewDeviceRegistry()
 	reg.ApplyAliases(cfg.DeviceAliases)
 
-	if initialIP != "" && initialIP != wiz.FallbackIP {
-		reg.AddOrUpdate(wiz.NewDevice(initialIP))
-		reg.SetActive(initialIP)
+	targetIP := initialIP
+	if targetIP == "" || targetIP == wiz.FallbackIP {
+		if cfg.LastActiveIP != "" {
+			targetIP = cfg.LastActiveIP
+		}
+	}
+
+	if targetIP != "" && targetIP != wiz.FallbackIP {
+		reg.AddOrUpdate(wiz.NewDevice(targetIP))
+		reg.SetActive(targetIP)
+	}
+
+	devCursor := 0
+	if activeDev, ok := reg.GetActive(); ok {
+		devices := reg.List()
+		for i, d := range devices {
+			if d.IP == activeDev.IP {
+				devCursor = i
+				break
+			}
+		}
 	}
 
 	return Model{
@@ -55,7 +73,7 @@ func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) 
 		width:         80,
 		height:        24,
 		sceneCursor:   0,
-		deviceCursor:  0,
+		deviceCursor:  devCursor,
 		undoStack:     make(map[string][]wiz.PilotParams),
 	}
 }
@@ -302,7 +320,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 			devices := m.Registry.List()
 			if m.deviceCursor >= 0 && m.deviceCursor < len(devices) {
 				dev := devices[m.deviceCursor]
-				m.Registry.SetActive(dev.IP)
+				m.setActiveDevice(dev.IP)
 				m.setStatusMessage(fmt.Sprintf("Active bulb set to %s", dev.IP))
 			}
 		case PanelControl:
@@ -350,7 +368,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 			devices := m.Registry.List()
 			if len(devices) > 0 {
 				m.deviceCursor = 0
-				m.Registry.SetActive(devices[0].IP)
+				m.setActiveDevice(devices[0].IP)
 			}
 		} else if m.activePanel == PanelScenes {
 			m.sceneCursor = 0
@@ -361,7 +379,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		devices := m.Registry.List()
 		if m.activePanel == PanelDevices && len(devices) > 0 {
 			m.deviceCursor = len(devices) - 1
-			m.Registry.SetActive(devices[m.deviceCursor].IP)
+			m.setActiveDevice(devices[m.deviceCursor].IP)
 		} else if m.activePanel == PanelScenes {
 			scenes := wiz.FilterScenes(m.searchQuery)
 			if len(scenes) > 0 {
@@ -451,7 +469,7 @@ func (m Model) navigateDown() (Model, tea.Cmd) {
 		devices := m.Registry.List()
 		if len(devices) > 0 {
 			m.deviceCursor = (m.deviceCursor + 1) % len(devices)
-			m.Registry.SetActive(devices[m.deviceCursor].IP)
+			m.setActiveDevice(devices[m.deviceCursor].IP)
 		}
 	} else if m.activePanel == PanelScenes {
 		scenes := wiz.FilterScenes(m.searchQuery)
@@ -476,7 +494,7 @@ func (m Model) navigateUp() (Model, tea.Cmd) {
 			if m.deviceCursor < 0 {
 				m.deviceCursor = len(devices) - 1
 			}
-			m.Registry.SetActive(devices[m.deviceCursor].IP)
+			m.setActiveDevice(devices[m.deviceCursor].IP)
 		}
 	} else if m.activePanel == PanelScenes {
 		scenes := wiz.FilterScenes(m.searchQuery)
@@ -705,6 +723,14 @@ func (m Model) View() string {
 func (m *Model) setStatusMessage(msg string) {
 	m.statusMessage = msg
 	m.statusTimer = time.Now()
+}
+
+func (m *Model) setActiveDevice(ip string) {
+	if m.Registry.SetActive(ip) {
+		if m.configManager != nil {
+			_ = m.configManager.SetLastActiveIP(ip)
+		}
+	}
 }
 
 func clamp(val, min, max int) int {

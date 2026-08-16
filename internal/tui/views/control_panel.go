@@ -25,7 +25,14 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 			powerStatus = styles.StatusError.Render("○ OFF")
 		}
 
-		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(dev.IP)
+		displayName := dev.IP
+		defaultName := fmt.Sprintf("WiZ Light (%s)", dev.IP)
+		defaultFallbackName := fmt.Sprintf("WiZ Light (%s) [Fallback]", dev.IP)
+		if dev.Name != "" && dev.Name != defaultName && dev.Name != defaultFallbackName {
+			displayName = fmt.Sprintf("%s (%s)", dev.Name, dev.IP)
+		}
+
+		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(displayName)
 		rssiStr := "📶 Online"
 		if dev.Rssi != 0 {
 			rssiStr = fmt.Sprintf("📶 %d dBm", dev.Rssi)
