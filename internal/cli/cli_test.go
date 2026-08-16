@@ -375,6 +375,27 @@ func TestCLIRun(t *testing.T) {
 		}
 	})
 
+	t.Run("Circadian command CLI execution", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+		opts := Options{
+			ConfigPath: cfgPath,
+			TargetIP:   "192.168.1.100",
+			Mock:       true,
+			Command:    "circadian 14:00",
+			Writer:     &buf,
+		}
+
+		err := Run(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Circadian rhythm set") {
+			t.Errorf("expected circadian set output, got: %s", buf.String())
+		}
+	})
+
 	t.Run("Shell completion script generation plain text", func(t *testing.T) {
 		tempDir := t.TempDir()
 		cfgPath := filepath.Join(tempDir, "config.json")

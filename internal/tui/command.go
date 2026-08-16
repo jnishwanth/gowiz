@@ -5,6 +5,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
+	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/config"
 	"wiz-tui/internal/wiz"
 )
@@ -40,7 +42,7 @@ type CommandActionResult struct {
 	ShowInfo         bool   // request active device diagnostic info display
 	ExportPath       string // destination path for exporting config
 	ImportPath       string // source path for importing config
-	CompletionShell string // target shell for generating autocompletion script
+	CompletionShell  string // target shell for generating autocompletion script
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -783,4 +785,32 @@ func (r *CommandRegistry) registerDefaults() {
 			StatusMsg:       fmt.Sprintf("Generated %s completion script", sh),
 		}
 	})
+
+	// Circadian Rhythm Handler
+	circadianHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		targetTime := time.Now()
+		if len(args) > 0 {
+			arg := strings.ToLower(args[0])
+			if arg == "info" || arg == "status" {
+				info := circadian.Calculate(targetTime)
+				return CommandActionResult{
+					StatusMsg: fmt.Sprintf("Circadian Status: %s", info.Status),
+				}
+			}
+			t, err := circadian.ParseTimeArg(args[0])
+			if err != nil {
+				return CommandActionResult{StatusMsg: err.Error()}
+			}
+			targetTime = t
+		}
+
+		info := circadian.Calculate(targetTime)
+		return CommandActionResult{
+			StatusMsg:   fmt.Sprintf("Circadian rhythm set: %s", info.Status),
+			PilotParams: &info.Params,
+			FadeLabel:   fmt.Sprintf("🌅 %s", info.Phase),
+		}
+	}
+	r.Register("circadian", circadianHandler)
+	r.Register("rhythm", circadianHandler)
 }

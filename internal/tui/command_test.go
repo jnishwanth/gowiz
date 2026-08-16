@@ -338,4 +338,29 @@ func TestCommandRegistryVerbs(t *testing.T) {
 			t.Errorf("expected status message error on invalid shell input")
 		}
 	})
+
+	t.Run("Circadian rhythm command dispatches", func(t *testing.T) {
+		resNow := ExecuteCommand("circadian", dev)
+		if resNow.PilotParams == nil {
+			t.Fatalf("expected PilotParams for default :circadian command")
+		}
+		if resNow.FadeLabel == "" {
+			t.Errorf("expected non-empty FadeLabel badge for circadian command")
+		}
+
+		resTime := ExecuteCommand("rhythm 14:30", dev)
+		if resTime.PilotParams == nil {
+			t.Fatalf("expected PilotParams for :rhythm 14:30 command")
+		}
+
+		resInfo := ExecuteCommand("circadian info", dev)
+		if resInfo.StatusMsg == "" {
+			t.Errorf("expected StatusMsg for :circadian info command")
+		}
+
+		resErr := ExecuteCommand("circadian 99:99", dev)
+		if resErr.PilotParams != nil {
+			t.Errorf("expected nil PilotParams on invalid time arg")
+		}
+	})
 }
