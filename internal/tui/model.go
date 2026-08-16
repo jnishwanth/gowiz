@@ -202,6 +202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Registry.AddOrUpdate(wiz.NewDevice(ip))
 			foundCount++
 		}
+		m.clampDeviceCursor()
 		m.setStatusMessage(fmt.Sprintf("Network scan complete. Found %d device(s).", foundCount))
 		cmds = append(cmds, SendOSCNotification("gowiz Network Scan", fmt.Sprintf("Found %d WiZ device(s) on network.", foundCount)))
 
@@ -334,7 +335,11 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 
 	case "home":
 		if m.activePanel == PanelDevices {
-			m.deviceCursor = 0
+			devices := m.Registry.List()
+			if len(devices) > 0 {
+				m.deviceCursor = 0
+				m.Registry.SetActive(devices[0].IP)
+			}
 		} else if m.activePanel == PanelScenes {
 			m.sceneCursor = 0
 		}
@@ -576,6 +581,33 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 				}
 			}
 
+		case "speed":
+			if len(parts) > 1 {
+				if sp, err := strconv.Atoi(parts[1]); err == nil {
+					active, ok := m.Registry.GetActive()
+					if ok && active.SceneID > 0 {
+						spClamped := clamp(sp, 20, 200)
+						m.setStatusMessage(fmt.Sprintf("Scene speed set: %d%%", spClamped))
+						return m, m.dispatchPilotCmd(wiz.NewSceneParams(active.SceneID, spClamped))
+					} else {
+						m.setStatusMessage("Speed requires an active dynamic scene.")
+					}
+				}
+			}
+
+		case "u", "undo":
+			active, ok := m.Registry.GetActive()
+			if ok {
+				stack := m.undoStack[active.IP]
+				if len(stack) > 0 {
+					lastState := stack[len(stack)-1]
+					m.undoStack[active.IP] = stack[:len(stack)-1]
+					m.setStatusMessage("Undid previous state change.")
+					return m, m.dispatchPilotCmd(lastState)
+				}
+				m.setStatusMessage("Nothing to undo.")
+			}
+
 		default:
 			m.setStatusMessage(fmt.Sprintf("Unknown command: :%s", cmdStr))
 		}
@@ -586,6 +618,10 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 		if len(m.commandBuffer) > 0 {
 			m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
 		}
+		return m, nil
+
+	case "ctrl+u":
+		m.commandBuffer = ""
 		return m, nil
 
 	default:
@@ -616,12 +652,26 @@ func (m Model) handleSearchKey(key string) (Model, tea.Cmd) {
 		m.clampSceneCursor()
 		return m, nil
 
+	case "ctrl+u":
+		m.searchQuery = ""
+		m.clampSceneCursor()
+		return m, nil
+
 	default:
 		if len(key) == 1 {
 			m.searchQuery += key
 		}
 		m.clampSceneCursor()
 		return m, nil
+	}
+}
+
+func (m *Model) clampDeviceCursor() {
+	devices := m.Registry.List()
+	if len(devices) == 0 {
+		m.deviceCursor = 0
+	} else if m.deviceCursor >= len(devices) {
+		m.deviceCursor = len(devices) - 1
 	}
 }
 

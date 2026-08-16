@@ -49,10 +49,12 @@ func RenderHelpOverlay(width, height int) string {
 			Title: "Command Mode (:) & Search (/)",
 			Keys: [][2]string{
 				{":scene <name|id>", "Activate dynamic scene (e.g. :scene sunset)"},
+				{":speed <20-200>", "Set dynamic scene speed percentage"},
 				{":temp <2200-6500>", "Set Color Temperature in Kelvin"},
 				{":rgb <r> <g> <b>", "Set RGB color values (0-255)"},
 				{":dim <10-100>", "Set exact dimming percentage"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
+				{":u / :undo", "Undo previous state change"},
 				{":scan", "Rescan subnet for WiZ devices"},
 				{"/ <query>", "Instant search / filter dynamic scenes"},
 				{":q / q", "Quit gowiz"},

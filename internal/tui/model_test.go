@@ -570,4 +570,108 @@ func TestTUIStateSynchronization(t *testing.T) {
 			t.Errorf("expected status message for rescan, got %q", m.statusMessage)
 		}
 	})
+
+	t.Run("Extended Command mode speed, undo, ctrl+u, and Home key device sync", func(t *testing.T) {
+		m.activePanel = PanelScenes
+		// Trigger a scene first to set SceneID > 0
+		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+
+		// Test :speed 150
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "speed 150" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ := m.Registry.GetActive()
+		if dev.Speed != 150 {
+			t.Errorf("expected speed 150 after :speed 150, got %d", dev.Speed)
+		}
+
+		// Test :undo
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "undo" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(Model)
+		if cmd != nil {
+			msg := cmd()
+			updated, _ = m.Update(msg)
+			m = updated.(Model)
+		}
+		dev, _ = m.Registry.GetActive()
+		if dev.Speed == 150 {
+			t.Errorf("expected speed restored from undo after :undo")
+		}
+
+		// Test ctrl+u in command mode
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+		m = updated.(Model)
+		for _, r := range "partialcommand" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+		m = updated.(Model)
+		if m.commandBuffer != "" {
+			t.Errorf("expected empty command buffer after ctrl+u, got %q", m.commandBuffer)
+		}
+		m.mode = ModeNormal
+
+		// Test ctrl+u in search mode
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		m = updated.(Model)
+		for _, r := range "ocean" {
+			updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(Model)
+		}
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+		m = updated.(Model)
+		if m.searchQuery != "" {
+			t.Errorf("expected empty search query after ctrl+u, got %q", m.searchQuery)
+		}
+		m.mode = ModeNormal
+
+		// Test Home key in PanelDevices updates active bulb target
+		m.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.50"))
+		m.Registry.AddOrUpdate(wiz.NewDevice("192.168.1.51"))
+		devicesList := m.Registry.List()
+		expectedFirstIP := devicesList[0].IP
+		m.activePanel = PanelDevices
+		m.deviceCursor = 1
+		m.Registry.SetActive(devicesList[1].IP)
+
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyHome})
+		m = updated.(Model)
+		if m.deviceCursor != 0 {
+			t.Errorf("expected deviceCursor 0 after Home, got %d", m.deviceCursor)
+		}
+		activeDev, _ := m.Registry.GetActive()
+		if activeDev.IP != expectedFirstIP {
+			t.Errorf("expected active target IP %s after Home, got %s", expectedFirstIP, activeDev.IP)
+		}
+
+		// Test clampDeviceCursor
+		m.deviceCursor = 99
+		m.clampDeviceCursor()
+		if m.deviceCursor >= len(m.Registry.List()) {
+			t.Errorf("expected clamped deviceCursor < len(list), got %d", m.deviceCursor)
+		}
+	})
 }
