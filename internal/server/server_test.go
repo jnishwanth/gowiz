@@ -343,6 +343,37 @@ func TestServerCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("POST command with wildcard selector", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"command": "warm",
+			"room":    "all",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/command", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/command: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("POST group command verb", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"command": ":group Living Room off",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/command", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/command: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
 	t.Run("POST empty command", func(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{
 			"command": "",

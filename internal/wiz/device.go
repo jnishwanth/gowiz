@@ -446,4 +446,3 @@ func (r *DeviceRegistry) GetDevicesBySelector(target string, groups map[string][
 func (r *DeviceRegistry) GetDevicesByGroupOrRoom(target string, groups map[string][]string) []*Device {
 	return r.GetDevicesBySelector(target, groups)
 }
-

@@ -298,6 +298,13 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) getGroups() map[string][]string {
+	if s.cfg.ConfigMgr != nil {
+		return s.cfg.ConfigMgr.GetGroups()
+	}
+	return nil
+}
+
 func (s *Server) handleGroups(w http.ResponseWriter, req *http.Request) {
 	if s.cfg.ConfigMgr == nil {
 		writeError(w, http.StatusServiceUnavailable, "config manager unavailable")
@@ -306,7 +313,7 @@ func (s *Server) handleGroups(w http.ResponseWriter, req *http.Request) {
 
 	switch req.Method {
 	case http.MethodGet:
-		groups := s.cfg.ConfigMgr.GetGroups()
+		groups := s.getGroups()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "ok",
 			"groups": groups,
@@ -445,11 +452,7 @@ func (s *Server) handlePilot(w http.ResponseWriter, r *http.Request) {
 		targetGroup = "all"
 	}
 	if targetGroup != "" {
-		var groups map[string][]string
-		if s.cfg.ConfigMgr != nil {
-			groups = s.cfg.ConfigMgr.GetGroups()
-		}
-		targets := s.cfg.DevRegistry.GetDevicesByGroupOrRoom(targetGroup, groups)
+		targets := s.cfg.DevRegistry.GetDevicesBySelector(targetGroup, s.getGroups())
 		if len(targets) == 0 {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found in group/room '%s'", targetGroup))
 			return
@@ -573,11 +576,7 @@ func (s *Server) handleEffects(w http.ResponseWriter, r *http.Request) {
 
 	targetIPs := []string{}
 	if req.Room != "" {
-		var groups map[string][]string
-		if s.cfg.ConfigMgr != nil {
-			groups = s.cfg.ConfigMgr.GetGroups()
-		}
-		targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, groups)
+		targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, s.getGroups())
 		if len(targets) == 0 {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target %q", req.Room))
 			return
@@ -677,11 +676,7 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 
 		ctx := r.Context()
 		if req.Room != "" {
-			var groups map[string][]string
-			if s.cfg.ConfigMgr != nil {
-				groups = s.cfg.ConfigMgr.GetGroups()
-			}
-			targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, groups)
+			targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, s.getGroups())
 			if len(targets) == 0 {
 				writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target '%s'", req.Room))
 				return
@@ -834,7 +829,7 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if res.TargetRoom != "" && res.PilotParams != nil {
-		targets := s.cfg.DevRegistry.GetDevicesByRoom(res.TargetRoom)
+		targets := s.cfg.DevRegistry.GetDevicesBySelector(res.TargetRoom, s.getGroups())
 		if len(targets) > 0 {
 			ips := make([]string, len(targets))
 			for i, d := range targets {
