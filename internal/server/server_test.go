@@ -268,7 +268,7 @@ func TestServerPresets(t *testing.T) {
 		}
 	})
 
-	t.Run("POST apply preset", func(t *testing.T) {
+	t.Run("POST apply preset to IP", func(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{
 			"name": "evening",
 			"ip":   "192.168.1.50",
@@ -276,6 +276,38 @@ func TestServerPresets(t *testing.T) {
 		resp, err := http.Post(ts.URL+"/api/v1/presets", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("failed POST /api/v1/presets: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("POST apply preset to room", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"name": "relax",
+			"room": "Living Room",
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/presets", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/presets to room: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("POST apply preset broadcast to all", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]any{
+			"name": "night",
+			"all":  true,
+		})
+		resp, err := http.Post(ts.URL+"/api/v1/presets", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/presets broadcast: %v", err)
 		}
 		defer resp.Body.Close()
 
@@ -767,6 +799,11 @@ func TestServerOpenAPI(t *testing.T) {
 	if !ok || len(paths) == 0 {
 		t.Errorf("expected non-empty paths map in OpenAPI spec, got %v", spec["paths"])
 	}
+	for _, expectedPath := range []string{"/api/v1/effects", "/api/v1/groups", "/api/v1/discover", "/api/v1/pilot"} {
+		if _, found := paths[expectedPath]; !found {
+			t.Errorf("expected path %s in OpenAPI spec", expectedPath)
+		}
+	}
 }
 
 func TestServerDocs(t *testing.T) {
@@ -780,6 +817,10 @@ func TestServerDocs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed GET %s: %v", ep, err)
 		}
+		bodyBytes, _ := json.Marshal(resp.Body)
+		_ = bodyBytes
+		buf := new(bytes.Buffer)
+		_, _ = buf.ReadFrom(resp.Body)
 		resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -787,6 +828,12 @@ func TestServerDocs(t *testing.T) {
 		}
 		if !bytes.Contains([]byte(resp.Header.Get("Content-Type")), []byte("text/html")) {
 			t.Errorf("expected Content-Type text/html for %s, got %s", ep, resp.Header.Get("Content-Type"))
+		}
+		htmlBody := buf.String()
+		for _, term := range []string{"/api/v1/effects", "/api/v1/groups", "/api/v1/discover"} {
+			if !bytes.Contains([]byte(htmlBody), []byte(term)) {
+				t.Errorf("expected HTML docs to contain endpoint %s", term)
+			}
 		}
 	}
 }
@@ -966,6 +1013,46 @@ func TestServerEffects(t *testing.T) {
 		}
 		if res["effect"] != "flash" {
 			t.Errorf("expected effect 'flash', got %v", res["effect"])
+		}
+	})
+
+	t.Run("POST /api/v1/effects room target", func(t *testing.T) {
+		payload := map[string]any{
+			"type":       "pulse",
+			"color":      "blue",
+			"count":      1,
+			"intervalMs": 5,
+			"room":       "Living Room",
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		resp, err := http.Post(ts.URL+"/api/v1/effects", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/effects room target: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("POST /api/v1/effects broadcast all", func(t *testing.T) {
+		payload := map[string]any{
+			"type":       "strobe",
+			"color":      "alert",
+			"count":      1,
+			"intervalMs": 5,
+			"all":        true,
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		resp, err := http.Post(ts.URL+"/api/v1/effects", "application/json", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed POST /api/v1/effects broadcast: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
 		}
 	})
 }

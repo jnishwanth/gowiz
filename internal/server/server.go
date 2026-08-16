@@ -565,6 +565,9 @@ type EffectRequest struct {
 	MaxDimming int               `json:"maxDimming,omitempty"`
 	IP         string            `json:"ip,omitempty"`
 	Room       string            `json:"room,omitempty"`
+	Group      string            `json:"group,omitempty"`
+	Target     string            `json:"target,omitempty"`
+	All        bool              `json:"all,omitempty"`
 }
 
 func (s *Server) handleEffects(w http.ResponseWriter, r *http.Request) {
@@ -607,11 +610,22 @@ func (s *Server) handleEffects(w http.ResponseWriter, r *http.Request) {
 		MaxDimming: req.MaxDimming,
 	}
 
+	targetGroup := req.Group
+	if targetGroup == "" {
+		targetGroup = req.Room
+	}
+	if targetGroup == "" {
+		targetGroup = req.Target
+	}
+	if req.All && targetGroup == "" {
+		targetGroup = "all"
+	}
+
 	targetIPs := []string{}
-	if req.Room != "" {
-		targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, s.getGroups())
+	if targetGroup != "" {
+		targets := s.cfg.DevRegistry.GetDevicesBySelector(targetGroup, s.getGroups())
 		if len(targets) == 0 {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target %q", req.Room))
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target %q", targetGroup))
 			return
 		}
 		for _, dev := range targets {
@@ -682,9 +696,12 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		var req struct {
-			Name string `json:"name"`
-			IP   string `json:"ip,omitempty"`
-			Room string `json:"room,omitempty"`
+			Name   string `json:"name"`
+			IP     string `json:"ip,omitempty"`
+			Room   string `json:"room,omitempty"`
+			Group  string `json:"group,omitempty"`
+			Target string `json:"target,omitempty"`
+			All    bool   `json:"all,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 			writeError(w, http.StatusBadRequest, "preset name required in JSON payload")
@@ -707,11 +724,22 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		targetGroup := req.Group
+		if targetGroup == "" {
+			targetGroup = req.Room
+		}
+		if targetGroup == "" {
+			targetGroup = req.Target
+		}
+		if req.All && targetGroup == "" {
+			targetGroup = "all"
+		}
+
 		ctx := r.Context()
-		if req.Room != "" {
-			targets := s.cfg.DevRegistry.GetDevicesBySelector(req.Room, s.getGroups())
+		if targetGroup != "" {
+			targets := s.cfg.DevRegistry.GetDevicesBySelector(targetGroup, s.getGroups())
 			if len(targets) == 0 {
-				writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target '%s'", req.Room))
+				writeError(w, http.StatusNotFound, fmt.Sprintf("no devices found matching target '%s'", targetGroup))
 				return
 			}
 			ips := make([]string, len(targets))
@@ -722,7 +750,7 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 
 			s.broadcaster.Publish(Event{
 				Type:    EventPresetApplied,
-				Room:    req.Room,
+				Room:    targetGroup,
 				Command: req.Name,
 				Status:  "ok",
 				Payload: params,
@@ -731,7 +759,7 @@ func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":       "ok",
 				"preset":       req.Name,
-				"room":         req.Room,
+				"target":       targetGroup,
 				"devicesCount": len(ips),
 			})
 			return
@@ -1116,9 +1144,39 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},
+			"/api/v1/groups": map[string]any{
+				"get": map[string]any{
+					"summary":   "List custom device groups",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+				"post": map[string]any{
+					"summary":   "Create or update custom device group",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/groups/{name}": map[string]any{
+				"get": map[string]any{
+					"summary":   "Get group details and members",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+				"delete": map[string]any{
+					"summary":   "Delete custom device group",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
+			"/api/v1/effects": map[string]any{
+				"get": map[string]any{
+					"summary":   "List available dynamic light effect types and named colors",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+				"post": map[string]any{
+					"summary":   "Trigger dynamic light effect (flash, pulse, strobe, rainbow) on target IP, room, group, or broadcast all",
+					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
+				},
+			},
 			"/api/v1/pilot": map[string]any{
 				"post": map[string]any{
-					"summary": "Send Pilot control parameters to device or room",
+					"summary": "Send Pilot control parameters to device, room, custom group, or broadcast all",
 					"requestBody": map[string]any{
 						"required": true,
 						"content": map[string]any{
@@ -1128,6 +1186,9 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 									"properties": map[string]any{
 										"ip":      map[string]any{"type": "string"},
 										"room":    map[string]any{"type": "string"},
+										"group":   map[string]any{"type": "string"},
+										"target":  map[string]any{"type": "string"},
+										"all":     map[string]any{"type": "boolean"},
 										"state":   map[string]any{"type": "boolean"},
 										"dimming": map[string]any{"type": "integer"},
 										"temp":    map[string]any{"type": "integer"},
@@ -1150,7 +1211,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 				"post": map[string]any{
-					"summary":   "Apply lighting preset to IP or room",
+					"summary":   "Apply lighting preset to target IP, room, group, or broadcast all",
 					"responses": map[string]any{"200": map[string]any{"description": "OK"}},
 				},
 			},
@@ -1212,6 +1273,7 @@ p { color: #94a3b8; }
 .method { font-weight: bold; padding: 0.25rem 0.5rem; border-radius: 4px; display: inline-block; margin-right: 0.5rem; font-size: 0.85rem; }
 .get { background: #0284c7; color: white; }
 .post { background: #16a34a; color: white; }
+.delete { background: #dc2626; color: white; }
 .endpoint { font-family: monospace; font-size: 1.1rem; color: #e2e8f0; }
 pre { background: #0f172a; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #38bdf8; font-size: 0.9rem; }
 a { color: #38bdf8; text-decoration: none; }
@@ -1233,25 +1295,42 @@ a:hover { text-decoration: underline; }
 </div>
 
 <div class="card">
+  <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/discover</span>
+  <p>Scan local network broadcast for WiZ smart lights.</p>
+</div>
+
+<div class="card">
   <span class="method get">GET</span><span class="endpoint">/api/v1/rooms</span>
   <p>List all room groupings and devices, or filter by room via <code>?name=&lt;room&gt;</code>.</p>
 </div>
 
 <div class="card">
+  <span class="method get">GET</span><span class="method post">POST</span><span class="method delete">DELETE</span><span class="endpoint">/api/v1/groups</span>
+  <p>List, create/update, or delete custom device groups.</p>
+  <pre>{"name": "desk", "members": ["192.168.1.50"]}</pre>
+</div>
+
+<div class="card">
   <span class="method post">POST</span><span class="endpoint">/api/v1/pilot</span>
-  <p>Send pilot state controls to a bulb IP or room target.</p>
+  <p>Send pilot state controls to a bulb IP, room, custom group, or broadcast all target.</p>
   <pre>{"ip": "192.168.1.50", "state": true, "dimming": 80, "temp": 3000}</pre>
 </div>
 
 <div class="card">
   <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/presets</span>
-  <p>GET lists available lighting presets. POST applies preset to target IP or room.</p>
+  <p>GET lists available lighting presets. POST applies preset to target IP, room, custom group, or broadcast all.</p>
   <pre>{"name": "evening", "room": "Living Room"}</pre>
 </div>
 
 <div class="card">
   <span class="method get">GET</span><span class="endpoint">/api/v1/scenes</span>
   <p>List dynamic scenes and categories with optional category (<code>?category=Nature</code>) or search (<code>?q=ocean</code>) filtering.</p>
+</div>
+
+<div class="card">
+  <span class="method get">GET</span><span class="method post">POST</span><span class="endpoint">/api/v1/effects</span>
+  <p>GET lists available dynamic effect types. POST triggers flash, pulse, strobe, or rainbow effects on target IP, room, or group.</p>
+  <pre>{"type": "flash", "color": "red", "room": "Living Room"}</pre>
 </div>
 
 <div class="card">
