@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"wiz-tui/internal/circadian"
 	"wiz-tui/internal/config"
@@ -537,6 +538,29 @@ func TestCLIRun(t *testing.T) {
 		}
 		if !strings.Contains(buf.String(), `"status": "ok"`) {
 			t.Errorf("expected JSON status ok, got: %s", buf.String())
+		}
+	})
+
+	t.Run("Server_mode_execution", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfgPath := filepath.Join(tempDir, "config.json")
+		var buf bytes.Buffer
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		opts := Options{
+			ConfigPath: cfgPath,
+			Mock:       true,
+			Server:     true,
+			ServerPort: 19876,
+			Writer:     &buf,
+		}
+		err := Run(ctx, opts)
+		if err != nil && err != context.DeadlineExceeded {
+			t.Fatalf("unexpected server mode error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Starting gowiz HTTP REST API server on 0.0.0.0:19876") {
+			t.Errorf("expected server startup message, got: %s", buf.String())
 		}
 	})
 }

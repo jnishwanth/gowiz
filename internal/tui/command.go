@@ -47,6 +47,8 @@ type CommandActionResult struct {
 	ServiceAction    string // service action: install, uninstall, status, systemd, launchd
 	ServiceType      string // target service type: systemd, launchd, auto
 	ServiceInterval  string // daemon sync interval string (e.g., 1m, 5m)
+	RunServer        bool   // request running HTTP REST API server
+	ServerPort       int    // target port for HTTP REST API server
 }
 
 // CommandHandler defines a function signature for processing command line arguments.
@@ -954,4 +956,21 @@ func (r *CommandRegistry) registerDefaults() {
 			StatusMsg:     "Generating launchd plist configuration...",
 		}
 	})
+
+	// HTTP REST API Server Handler
+	serverHandler := func(args []string, activeDev *wiz.Device) CommandActionResult {
+		port := 8080
+		if len(args) > 0 {
+			if p, err := strconv.Atoi(args[0]); err == nil && p > 0 {
+				port = p
+			}
+		}
+		return CommandActionResult{
+			RunServer:  true,
+			ServerPort: port,
+			StatusMsg:  fmt.Sprintf("Starting gowiz HTTP REST API server on port %d...", port),
+		}
+	}
+	r.Register("serve", serverHandler)
+	r.Register("server", serverHandler)
 }

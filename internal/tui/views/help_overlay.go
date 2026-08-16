@@ -75,6 +75,7 @@ func RenderHelpOverlay(width, height int) string {
 				{":circadian [room] [t]", "24-hr circadian rhythm (:circadian 14:30 / :circadian room Bedroom)"},
 				{":daemon / :schedule", "Run background circadian schedule sync daemon"},
 				{":service <action>", "Manage systemd / launchd daemon service (:service install/uninstall)"},
+				{":serve [port]", "Start gowiz HTTP REST API server (default port: 8080)"},
 				{":toggle", "Toggle power state on active/selected lights"},
 				{":timer <mins>", "Set custom sleep countdown timer"},
 				{":u / :undo", "Undo previous state change"},

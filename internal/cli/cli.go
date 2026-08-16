@@ -13,6 +13,7 @@ import (
 	"wiz-tui/internal/completion"
 	"wiz-tui/internal/config"
 	"wiz-tui/internal/daemon"
+	"wiz-tui/internal/server"
 	"wiz-tui/internal/service"
 	"wiz-tui/internal/tui"
 	"wiz-tui/internal/wiz"
@@ -28,6 +29,8 @@ type Options struct {
 	Daemon         bool
 	DaemonOnce     bool
 	DaemonInterval time.Duration
+	Server         bool
+	ServerPort     int
 	Writer         io.Writer
 }
 
@@ -63,6 +66,22 @@ func Run(ctx context.Context, opts Options) error {
 			Writer:   w,
 		})
 		return d.Run(ctx)
+	}
+
+	if opts.Server {
+		port := opts.ServerPort
+		if port <= 0 {
+			port = 8080
+		}
+		srv := server.NewServer(server.Config{
+			Port:      port,
+			WizClient: client,
+			ConfigMgr: cfgMgr,
+		})
+		if !opts.JSONOutput {
+			fmt.Fprintf(w, "Starting gowiz HTTP REST API server on %s...\n", srv.ListenAddr())
+		}
+		return srv.Start(ctx)
 	}
 
 	reg := wiz.NewDeviceRegistry()
@@ -106,6 +125,26 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	result := tui.ExecuteCommandWithRoomPhases(cmdStr, activeDev, cfg.CircadianPhases, cfg.RoomCircadianPhases)
+
+	if result.RunServer {
+		port := result.ServerPort
+		if port <= 0 {
+			port = opts.ServerPort
+		}
+		if port <= 0 {
+			port = 8080
+		}
+		srv := server.NewServer(server.Config{
+			Port:        port,
+			WizClient:   client,
+			ConfigMgr:   cfgMgr,
+			DevRegistry: reg,
+		})
+		if !opts.JSONOutput {
+			fmt.Fprintf(w, "Starting gowiz HTTP REST API server on %s...\n", srv.ListenAddr())
+		}
+		return srv.Start(ctx)
+	}
 
 	// Resolve preset params if custom or builtin preset requested
 	if result.ApplyPresetName != "" && result.PilotParams == nil {

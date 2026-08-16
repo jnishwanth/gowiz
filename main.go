@@ -28,6 +28,9 @@ func main() {
 	daemonFlag := flag.Bool("daemon", false, "Run in background daemon mode for circadian schedule sync")
 	onceFlag := flag.Bool("once", false, "Run a single circadian sync pass and exit")
 	intervalFlag := flag.Duration("interval", 1*time.Minute, "Sync interval duration in daemon mode (e.g., 1m, 5m, 30s)")
+	serverFlag := flag.Bool("server", false, "Run in HTTP REST API server mode")
+	flag.BoolVar(serverFlag, "s", false, "Run in HTTP REST API server mode")
+	portFlag := flag.Int("port", 8080, "Port for HTTP REST API server mode (default: 8080)")
 
 	flag.Parse()
 
@@ -64,6 +67,22 @@ func main() {
 		}
 		if err := cli.Run(context.Background(), opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if *serverFlag || cmdStr == "serve" || cmdStr == "server" {
+		opts := cli.Options{
+			ConfigPath: *configFlag,
+			TargetIP:   *ipFlag,
+			Mock:       *mockFlag,
+			JSONOutput: *jsonFlag,
+			Server:     true,
+			ServerPort: *portFlag,
+		}
+		if err := cli.Run(context.Background(), opts); err != nil {
+			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 			os.Exit(1)
 		}
 		os.Exit(0)

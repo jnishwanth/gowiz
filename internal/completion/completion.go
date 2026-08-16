@@ -32,8 +32,8 @@ _gowiz_completions() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval"
-    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd cat category categories info diag status config recent export import undo help scan quit completion"
+    opts="--ip --cmd --config --json --mock --version -v --help --check --daemon --once --interval --server -s --port"
+    verbs="on off toggle power dim bright warm cool daylight hex color temp rgb speed scene ocean sunset party cozy forest fireplace romance relax focus nightlight preset room group fade sunrise circadian rhythm daemon schedule service systemd launchd serve server cat category categories info diag status config recent export import undo help scan quit completion"
     presets="evening movie night focus work relax party list save delete"
     categories="nature cozy white party mood dynamic"
     shells="bash zsh fish"
@@ -96,6 +96,7 @@ _gowiz() {
         'circadian:Apply 24-hour circadian lighting rhythm'
         'daemon:Run background circadian schedule sync daemon'
         'service:Manage systemd or launchd background daemon service'
+        'serve:Start HTTP REST API server'
         'cat:Filter scenes by category'
         'info:Display device telemetry diagnostics'
         'config:Display configuration status'
@@ -114,6 +115,9 @@ _gowiz() {
         '--daemon[Run in background circadian sync daemon mode]'
         '--once[Run a single circadian sync pass]'
         '--interval[Sync interval duration in daemon mode]:duration:'
+        '--server[Run in HTTP REST API server mode]'
+        '-s[Run in HTTP REST API server mode]'
+        '--port[Port for HTTP REST API server]:port:'
         '--version[Print version information]'
         '-v[Print version information]'
         '--help[Show help message]'
@@ -165,6 +169,8 @@ complete -c gowiz -l mock -d "Run in mock hardware mode"
 complete -c gowiz -l daemon -d "Run in background circadian sync daemon mode"
 complete -c gowiz -l once -d "Run a single circadian sync pass"
 complete -c gowiz -l interval -d "Sync interval duration" -r
+complete -c gowiz -l server -s s -d "Run in HTTP REST API server mode"
+complete -c gowiz -l port -d "Port for HTTP REST API server" -r
 
 # Commands
 complete -c gowiz -n "__fish_use_subcommand" -a on -d "Turn smart light on"
@@ -181,6 +187,7 @@ complete -c gowiz -n "__fish_use_subcommand" -a fade -d "Start linear dimming fa
 complete -c gowiz -n "__fish_use_subcommand" -a circadian -d "Apply 24-hour circadian lighting rhythm"
 complete -c gowiz -n "__fish_use_subcommand" -a daemon -d "Run background circadian schedule sync daemon"
 complete -c gowiz -n "__fish_use_subcommand" -a service -d "Manage systemd or launchd background daemon service"
+complete -c gowiz -n "__fish_use_subcommand" -a serve -d "Start HTTP REST API server"
 complete -c gowiz -n "__fish_use_subcommand" -a cat -d "Filter scenes by category"
 complete -c gowiz -n "__fish_use_subcommand" -a info -d "Display device telemetry diagnostics"
 complete -c gowiz -n "__fish_use_subcommand" -a config -d "Display current configuration"
