@@ -161,4 +161,3 @@ func GetCategorySummaries() []CategorySummary {
 	}
 	return summaries
 }
-

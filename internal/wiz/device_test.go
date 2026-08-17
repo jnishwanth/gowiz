@@ -7,10 +7,13 @@ import (
 func TestDeviceRegistry(t *testing.T) {
 	reg := NewDeviceRegistry()
 
-	t.Run("Default state has FallbackIP active", func(t *testing.T) {
-		active, ok := reg.GetActive()
-		if !ok || active.IP != FallbackIP {
-			t.Errorf("expected active target FallbackIP, got %v", active)
+	t.Run("Default state is empty", func(t *testing.T) {
+		_, ok := reg.GetActive()
+		if ok {
+			t.Errorf("expected no active target in new empty registry")
+		}
+		if len(reg.List()) != 0 {
+			t.Errorf("expected 0 devices initially, got %d", len(reg.List()))
 		}
 	})
 
@@ -19,8 +22,12 @@ func TestDeviceRegistry(t *testing.T) {
 		reg.AddOrUpdate(dev2)
 
 		devices := reg.List()
-		if len(devices) != 2 {
-			t.Errorf("expected 2 devices in list, got %d", len(devices))
+		if len(devices) != 1 {
+			t.Errorf("expected 1 device in list, got %d", len(devices))
+		}
+		active, ok := reg.GetActive()
+		if !ok || active.IP != "192.168.1.120" {
+			t.Errorf("expected active target 192.168.1.120, got %v", active)
 		}
 	})
 
@@ -53,6 +60,7 @@ func TestDeviceRegistry(t *testing.T) {
 	})
 
 	t.Run("Multi-selection logic", func(t *testing.T) {
+		reg.AddOrUpdate(NewDevice("192.168.1.121"))
 		reg.ToggleSelection("192.168.1.120")
 		selected := reg.GetSelectedOrActive()
 		if len(selected) != 1 || selected[0].IP != "192.168.1.120" {
@@ -167,13 +175,12 @@ func TestDeviceRegistry(t *testing.T) {
 		}
 	})
 
-	t.Run("GetDevicesByGroup and GetDevicesByGroupOrRoom", func(t *testing.T) {
+	t.Run("GetDevicesByGroup and room fallback", func(t *testing.T) {
 		regGroup := NewDeviceRegistry()
 		d1 := NewDevice("192.168.1.50")
-		d1.Name = "Desk Light 1"
+		d1.Room = "Living Room"
 		d2 := NewDevice("192.168.1.51")
 		d2.Room = "Office"
-
 		regGroup.AddOrUpdate(d1)
 		regGroup.AddOrUpdate(d2)
 
@@ -204,8 +211,8 @@ func TestDeviceRegistry(t *testing.T) {
 
 		for _, wildcard := range []string{"all", "ALL", "*", "everyone", "broadcast"} {
 			devs := regAll.GetDevicesBySelector(wildcard, groups)
-			if len(devs) != 3 {
-				t.Errorf("expected 3 devices for wildcard %q, got %d", wildcard, len(devs))
+			if len(devs) != 2 {
+				t.Errorf("expected 2 devices for wildcard %q, got %d", wildcard, len(devs))
 			}
 		}
 
@@ -239,6 +246,28 @@ func TestDeviceRegistry(t *testing.T) {
 		}
 		if devs := regAll.GetDevicesBySelector("nonexistent", groups); devs != nil {
 			t.Errorf("expected nil for non-existent target, got %v", devs)
+		}
+	})
+
+	t.Run("UpdateFromTelemetry preserves local optimistic brightness when light is off", func(t *testing.T) {
+		dev := NewDevice("192.168.1.50")
+		dev.State = false
+		dev.Brightness = 30 // User reduced brightness to 30% while OFF
+
+		offState := false
+		oldDimming := 100
+		p := PilotParams{
+			State:   &offState,
+			Dimming: &oldDimming,
+		}
+
+		dev.UpdateFromTelemetry(p)
+
+		if dev.Brightness != 30 {
+			t.Errorf("expected optimistic brightness 30 preserved when off, got %d", dev.Brightness)
+		}
+		if dev.State != false {
+			t.Errorf("expected state to remain false")
 		}
 	})
 }

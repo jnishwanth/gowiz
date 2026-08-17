@@ -77,6 +77,44 @@ func (d *Device) UpdateFromPilot(p PilotParams) {
 	}
 }
 
+// UpdateFromTelemetry updates device state from background telemetry (getPilot).
+// If the light is OFF, it preserves the user's local optimistic brightness and color settings.
+func (d *Device) UpdateFromTelemetry(p PilotParams) {
+	d.LastSeen = time.Now()
+	d.Online = true
+
+	if p.Rssi != nil {
+		d.Rssi = *p.Rssi
+	}
+	if p.Mac != "" {
+		d.MAC = p.Mac
+	}
+
+	isOff := (p.State != nil && !*p.State) || (!d.State && p.State == nil)
+	if p.State != nil {
+		d.State = *p.State
+	}
+
+	// Only overwrite brightness and color settings from telemetry if the light is ON
+	if !isOff {
+		if p.Dimming != nil {
+			d.Brightness = *p.Dimming
+		}
+		if p.R != nil && p.G != nil && p.B != nil {
+			d.RGB = [3]int{*p.R, *p.G, *p.B}
+		}
+		if p.Temp != nil {
+			d.Temp = *p.Temp
+		}
+		if p.SceneID != nil {
+			d.SceneID = *p.SceneID
+		}
+		if p.Speed != nil {
+			d.Speed = *p.Speed
+		}
+	}
+}
+
 // SignalPercentage maps device RSSI (ranging -90 dBm to -30 dBm) to a 0..100 percentage.
 func (d *Device) SignalPercentage() int {
 	if d.Rssi == 0 {
@@ -130,15 +168,11 @@ type DeviceRegistry struct {
 }
 
 func NewDeviceRegistry() *DeviceRegistry {
-	reg := &DeviceRegistry{
+	return &DeviceRegistry{
 		devices: make(map[string]*Device),
 		aliases: make(map[string]string),
 		rooms:   make(map[string]string),
 	}
-	// Seed with FallbackIP
-	reg.AddOrUpdate(NewDevice(FallbackIP))
-	reg.activeTarget = FallbackIP
-	return reg
 }
 
 // ApplyAliases sets multiple bulb alias mappings and updates existing matching devices.
