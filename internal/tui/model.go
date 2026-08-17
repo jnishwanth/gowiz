@@ -53,19 +53,19 @@ func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) 
 	reg.ApplyRooms(cfg.DeviceRooms)
 
 	for _, recIP := range cfg.RecentIPs {
-		if recIP != "" && recIP != wiz.FallbackIP {
+		if recIP != "" {
 			reg.AddOrUpdate(wiz.NewDevice(recIP))
 		}
 	}
 
 	targetIP := initialIP
-	if targetIP == "" || targetIP == wiz.FallbackIP {
+	if targetIP == "" {
 		if cfg.LastActiveIP != "" {
 			targetIP = cfg.LastActiveIP
 		}
 	}
 
-	if targetIP != "" && targetIP != wiz.FallbackIP {
+	if targetIP != "" {
 		reg.AddOrUpdate(wiz.NewDevice(targetIP))
 		reg.SetActive(targetIP)
 	}
@@ -166,6 +166,7 @@ func (m Model) dispatchPilotCmdToDevices(targets []*wiz.Device, params wiz.Pilot
 		return nil
 	}
 
+	cmdParams := params
 	var ips []string
 	for _, dev := range targets {
 		ips = append(ips, dev.IP)
@@ -186,20 +187,29 @@ func (m Model) dispatchPilotCmdToDevices(targets []*wiz.Device, params wiz.Pilot
 			Speed:   &sp,
 		}
 		m.undoStack[dev.IP] = append(m.undoStack[dev.IP], prev)
+
+		// Immediate optimistic local update so UI reflects change instantly
+		dev.UpdateFromPilot(params)
+
+		// When turning ON, ensure the bulb receives the optimistic target brightness
+		if params.State != nil && *params.State && params.Dimming == nil && dev.Brightness > 0 {
+			targetDim := dev.Brightness
+			cmdParams.Dimming = &targetDim
+		}
 	}
 
 	client := m.client
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		errs := client.SendBatchCommand(ctx, ips, params)
+		errs := client.SendBatchCommand(ctx, ips, cmdParams)
 
 		for _, err := range errs {
 			if err != nil {
-				return CommandFinishedMsg{Err: err, IPs: ips, Params: params}
+				return CommandFinishedMsg{Err: err, IPs: ips, Params: cmdParams}
 			}
 		}
-		return CommandFinishedMsg{Err: nil, IPs: ips, Params: params}
+		return CommandFinishedMsg{Err: nil, IPs: ips, Params: cmdParams}
 	}
 }
 
@@ -301,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TelemetryReceivedMsg:
 		if dev, found := m.Registry.Get(msg.IP); found {
 			if msg.Err == nil && msg.Pilot != nil {
-				dev.UpdateFromPilot(*msg.Pilot)
+				dev.UpdateFromTelemetry(*msg.Pilot)
 				dev.Online = true
 			} else {
 				dev.Online = false

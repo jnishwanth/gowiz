@@ -102,7 +102,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 	for _, recIP := range cfg.RecentIPs {
-		if recIP != "" && recIP != wiz.FallbackIP {
+		if recIP != "" {
 			reg.AddOrUpdate(wiz.NewDevice(recIP))
 		}
 	}
@@ -111,13 +111,13 @@ func Run(ctx context.Context, opts Options) error {
 	reg.ApplyRooms(cfg.DeviceRooms)
 
 	targetIP := opts.TargetIP
-	if targetIP == "" || targetIP == wiz.FallbackIP {
+	if targetIP == "" {
 		if cfg.LastActiveIP != "" {
 			targetIP = cfg.LastActiveIP
 		}
 	}
 
-	if targetIP != "" && targetIP != wiz.FallbackIP {
+	if targetIP != "" {
 		reg.AddOrUpdate(wiz.NewDevice(targetIP))
 		reg.SetActive(targetIP)
 	}
@@ -670,7 +670,7 @@ func Run(ctx context.Context, opts Options) error {
 		if result.TargetIP != "" {
 			targetIPToUse = result.TargetIP
 		}
-		if targetIPToUse == "" || targetIPToUse == wiz.FallbackIP {
+		if targetIPToUse == "" {
 			return fmt.Errorf("no target IP address specified (use --ip <address> or set active bulb)")
 		}
 
@@ -719,7 +719,7 @@ func Run(ctx context.Context, opts Options) error {
 			if result.TargetIP != "" {
 				targetIPToUse = result.TargetIP
 			}
-			if targetIPToUse != "" && targetIPToUse != wiz.FallbackIP {
+			if targetIPToUse != "" {
 				targetIPs = append(targetIPs, targetIPToUse)
 			} else {
 				devices := reg.List()

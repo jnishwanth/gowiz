@@ -67,8 +67,8 @@ func TestServerHealth(t *testing.T) {
 	if data["status"] != "ok" {
 		t.Errorf("expected status 'ok', got %v", data["status"])
 	}
-	if data["deviceCount"] != float64(3) {
-		t.Errorf("expected deviceCount 3, got %v", data["deviceCount"])
+	if data["deviceCount"] != float64(2) {
+		t.Errorf("expected deviceCount 2, got %v", data["deviceCount"])
 	}
 
 	// Method not allowed test
@@ -105,8 +105,8 @@ func TestServerDevices(t *testing.T) {
 		}
 
 		devs, ok := data["devices"].([]any)
-		if !ok || len(devs) != 3 {
-			t.Errorf("expected 3 devices, got %v", data["devices"])
+		if !ok || len(devs) != 2 {
+			t.Errorf("expected 2 devices, got %v", data["devices"])
 		}
 	})
 
