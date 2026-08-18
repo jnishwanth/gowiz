@@ -2,6 +2,7 @@ package wiz
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -84,6 +85,35 @@ func TestPayloadBuilders(t *testing.T) {
 		}
 		if resp.Result.Dimming == nil || *resp.Result.Dimming != 80 {
 			t.Errorf("expected dimming 80, got %v", resp.Result.Dimming)
+		}
+	})
+
+	t.Run("BuildGetPilotPayload and BuildGetSystemConfigPayload", func(t *testing.T) {
+		getPilotBytes, err := BuildGetPilotPayload()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(string(getPilotBytes), `"method":"getPilot"`) {
+			t.Errorf("expected getPilot method in payload, got %s", string(getPilotBytes))
+		}
+
+		sysBytes, err := BuildGetSystemConfigPayload()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(string(sysBytes), `"method":"getSystemConfig"`) {
+			t.Errorf("expected getSystemConfig method in payload, got %s", string(sysBytes))
+		}
+	})
+
+	t.Run("ParseWiZResponse with bulb error", func(t *testing.T) {
+		rawErr := []byte(`{"method":"setPilot","env":"pro","error":{"code":-1001,"message":"Param error"}}`)
+		resp, err := ParseWiZResponse(rawErr)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resp.Error == nil || resp.Error.Code != -1001 {
+			t.Errorf("expected error code -1001, got %v", resp.Error)
 		}
 	})
 }

@@ -103,3 +103,61 @@ func FilterScenes(query string) []Scene {
 	}
 	return matched
 }
+
+// GetSceneCategories returns a list of unique scene categories.
+func GetSceneCategories() []string {
+	var categories []string
+	seen := make(map[string]bool)
+	for _, s := range AllScenes {
+		if s.Category != "" && !seen[s.Category] {
+			seen[s.Category] = true
+			categories = append(categories, s.Category)
+		}
+	}
+	return categories
+}
+
+// FilterScenesByCategory returns scenes belonging to a specific category (case-insensitive).
+func FilterScenesByCategory(category string) []Scene {
+	catLower := strings.ToLower(strings.TrimSpace(category))
+	if catLower == "" {
+		return AllScenes
+	}
+	var matched []Scene
+	for _, s := range AllScenes {
+		if strings.ToLower(s.Category) == catLower {
+			matched = append(matched, s)
+		}
+	}
+	return matched
+}
+
+// CategorySummary provides structured metadata for a scene category.
+type CategorySummary struct {
+	Category   string   `json:"category"`
+	Count      int      `json:"count"`
+	SceneIDs   []int    `json:"sceneIds"`
+	SceneNames []string `json:"sceneNames"`
+}
+
+// GetCategorySummaries returns a list of category summaries with scene counts and scene metadata.
+func GetCategorySummaries() []CategorySummary {
+	categories := GetSceneCategories()
+	summaries := make([]CategorySummary, 0, len(categories))
+	for _, cat := range categories {
+		scenes := FilterScenesByCategory(cat)
+		ids := make([]int, 0, len(scenes))
+		names := make([]string, 0, len(scenes))
+		for _, sc := range scenes {
+			ids = append(ids, sc.ID)
+			names = append(names, sc.Name)
+		}
+		summaries = append(summaries, CategorySummary{
+			Category:   cat,
+			Count:      len(scenes),
+			SceneIDs:   ids,
+			SceneNames: names,
+		})
+	}
+	return summaries
+}

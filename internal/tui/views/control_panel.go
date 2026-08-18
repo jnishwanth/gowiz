@@ -10,7 +10,7 @@ import (
 	"wiz-tui/internal/wiz"
 )
 
-func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, width, height int) string {
+func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, fadeRemainingSecs int, fadeLabel string, width, height int) string {
 	innerWidth := max(width-6, 18)
 	header := RenderSectionHeader("🎛 Control Center", isFocused, innerWidth)
 
@@ -25,21 +25,41 @@ func RenderControlPanel(dev *wiz.Device, isFocused bool, sleepTimerSecs int, wid
 			powerStatus = styles.StatusError.Render("○ OFF")
 		}
 
-		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(dev.IP)
-		rssiStr := "📶 Online"
-		if dev.Rssi != 0 {
-			rssiStr = fmt.Sprintf("📶 %d dBm", dev.Rssi)
+		displayName := dev.IP
+		defaultName := fmt.Sprintf("WiZ Light (%s)", dev.IP)
+		defaultFallbackName := fmt.Sprintf("WiZ Light (%s) [Fallback]", dev.IP)
+		if dev.Name != "" && dev.Name != defaultName && dev.Name != defaultFallbackName {
+			displayName = fmt.Sprintf("%s (%s)", dev.Name, dev.IP)
 		}
+
+		targetIP := lipgloss.NewStyle().Foreground(styles.Mauve).Bold(true).Render(displayName)
+		rssiStr := dev.SignalBar()
 		rssiPill := lipgloss.NewStyle().Foreground(styles.Subtext0).Render(rssiStr)
+		roomStr := ""
+		if dev.Room != "" {
+			roomStr = fmt.Sprintf(" │ 🏠 %s", lipgloss.NewStyle().Foreground(styles.Teal).Render(dev.Room))
+		}
 
-		sb.WriteString(fmt.Sprintf("%s │ %s │ %s\n", targetIP, powerStatus, rssiPill))
+		sb.WriteString(fmt.Sprintf("%s │ %s │ %s%s\n", targetIP, powerStatus, rssiPill, roomStr))
 
-		// Sleep Countdown Badge if running
+		// Badges container
+		badges := []string{}
 		if sleepTimerSecs > 0 {
 			mins := sleepTimerSecs / 60
 			secs := sleepTimerSecs % 60
-			timerBadge := lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep: %02d:%02d", mins, secs))
-			sb.WriteString(timerBadge + "\n")
+			badges = append(badges, lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Peach).Bold(true).Padding(0, 1).Render(fmt.Sprintf("⏳ Sleep: %02d:%02d", mins, secs)))
+		}
+		if fadeRemainingSecs > 0 {
+			mins := fadeRemainingSecs / 60
+			secs := fadeRemainingSecs % 60
+			lbl := fadeLabel
+			if lbl == "" {
+				lbl = "🌆 Fade"
+			}
+			badges = append(badges, lipgloss.NewStyle().Foreground(styles.Crust).Background(styles.Teal).Bold(true).Padding(0, 1).Render(fmt.Sprintf("%s: %02d:%02d", lbl, mins, secs)))
+		}
+		if len(badges) > 0 {
+			sb.WriteString(strings.Join(badges, "  ") + "\n")
 		}
 
 		// Brightness Bar

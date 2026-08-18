@@ -146,7 +146,7 @@ func ParseWiZResponse(data []byte) (*WiZResponse, error) {
 	return &resp, nil
 }
 
-func clamp(val, min, max int) int {
+func Clamp(val, min, max int) int {
 	if val < min {
 		return min
 	}
@@ -154,4 +154,8 @@ func clamp(val, min, max int) int {
 		return max
 	}
 	return val
+}
+
+func clamp(val, min, max int) int {
+	return Clamp(val, min, max)
 }

@@ -3,53 +3,100 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"wiz-tui/internal/circadian"
+	"wiz-tui/internal/config"
 	"wiz-tui/internal/tui/styles"
 	"wiz-tui/internal/tui/views"
 	"wiz-tui/internal/wiz"
 )
 
 type Model struct {
-	client         wiz.Client
-	Registry       *wiz.DeviceRegistry
-	mode           Mode
-	activePanel    Panel
-	commandBuffer  string
-	searchQuery    string
-	statusMessage  string
-	statusTimer    time.Time
-	width          int
-	height         int
-	sceneCursor    int
-	deviceCursor   int
-	sleepTimerSecs int
-	animFrame      int
-	undoStack      map[string][]wiz.PilotParams
+	client              wiz.Client
+	Registry            *wiz.DeviceRegistry
+	configManager       *config.Manager
+	mode                Mode
+	activePanel         Panel
+	commandBuffer       string
+	searchQuery         string
+	statusMessage       string
+	statusTimer         time.Time
+	width               int
+	height              int
+	sceneCursor         int
+	deviceCursor        int
+	sleepTimerSecs      int
+	fadeActive          bool
+	fadeStartDim        int
+	fadeTargetDim       int
+	fadeStartTemp       int
+	fadeTargetTemp      int
+	fadeDurationSecs    int
+	fadeElapsedSecs     int
+	fadeTurnOffOnFinish bool
+	fadeLabel           string
+	animFrame           int
+	undoStack           map[string][]wiz.PilotParams
 }
 
-func NewModel(client wiz.Client, initialIP string) Model {
+func NewModelWithConfig(client wiz.Client, initialIP string, configPath string) Model {
+	cfgMgr := config.NewManager(configPath)
+	_ = cfgMgr.Load()
+	cfg := cfgMgr.GetConfig()
+
 	reg := wiz.NewDeviceRegistry()
-	if initialIP != "" && initialIP != wiz.FallbackIP {
-		reg.AddOrUpdate(wiz.NewDevice(initialIP))
-		reg.SetActive(initialIP)
+	reg.ApplyAliases(cfg.DeviceAliases)
+	reg.ApplyRooms(cfg.DeviceRooms)
+
+	for _, recIP := range cfg.RecentIPs {
+		if recIP != "" {
+			reg.AddOrUpdate(wiz.NewDevice(recIP))
+		}
+	}
+
+	targetIP := initialIP
+	if targetIP == "" {
+		if cfg.LastActiveIP != "" {
+			targetIP = cfg.LastActiveIP
+		}
+	}
+
+	if targetIP != "" {
+		reg.AddOrUpdate(wiz.NewDevice(targetIP))
+		reg.SetActive(targetIP)
+	}
+
+	devCursor := 0
+	if activeDev, ok := reg.GetActive(); ok {
+		devices := reg.List()
+		for i, d := range devices {
+			if d.IP == activeDev.IP {
+				devCursor = i
+				break
+			}
+		}
 	}
 
 	return Model{
-		client:       client,
-		Registry:     reg,
-		mode:         ModeNormal,
-		activePanel:  PanelDevices,
-		width:        80,
-		height:       24,
-		sceneCursor:  0,
-		deviceCursor: 0,
-		undoStack:    make(map[string][]wiz.PilotParams),
+		client:        client,
+		Registry:      reg,
+		configManager: cfgMgr,
+		mode:          ModeNormal,
+		activePanel:   PanelDevices,
+		width:         80,
+		height:        24,
+		sceneCursor:   0,
+		deviceCursor:  devCursor,
+		undoStack:     make(map[string][]wiz.PilotParams),
 	}
+}
+
+func NewModel(client wiz.Client, initialIP string) Model {
+	return NewModelWithConfig(client, initialIP, "")
 }
 
 type ScanFinishedMsg []string
@@ -114,40 +161,133 @@ func (m Model) pollTelemetryCmd() tea.Cmd {
 	}
 }
 
-func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
-	targets := m.Registry.GetSelectedOrActive()
+func (m Model) dispatchPilotCmdToDevices(targets []*wiz.Device, params wiz.PilotParams) tea.Cmd {
 	if len(targets) == 0 {
 		return nil
 	}
 
+	cmdParams := params
 	var ips []string
 	for _, dev := range targets {
 		ips = append(ips, dev.IP)
 
+		st := dev.State
+		dim := dev.Brightness
+		r, g, b := dev.RGB[0], dev.RGB[1], dev.RGB[2]
+		temp := dev.Temp
+		sc := dev.SceneID
+		sp := dev.Speed
+
 		prev := wiz.PilotParams{
-			State:   &dev.State,
-			Dimming: &dev.Brightness,
-			R:       &dev.RGB[0], G: &dev.RGB[1], B: &dev.RGB[2],
-			Temp:    &dev.Temp,
-			SceneID: &dev.SceneID,
-			Speed:   &dev.Speed,
+			State:   &st,
+			Dimming: &dim,
+			R:       &r, G: &g, B: &b,
+			Temp:    &temp,
+			SceneID: &sc,
+			Speed:   &sp,
 		}
 		m.undoStack[dev.IP] = append(m.undoStack[dev.IP], prev)
+
+		// Immediate optimistic local update so UI reflects change instantly
+		dev.UpdateFromPilot(params)
+
+		// When turning ON, ensure the bulb receives the optimistic target brightness
+		if params.State != nil && *params.State && params.Dimming == nil && dev.Brightness > 0 {
+			targetDim := dev.Brightness
+			cmdParams.Dimming = &targetDim
+		}
 	}
 
 	client := m.client
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		errs := client.SendBatchCommand(ctx, ips, params)
+		errs := client.SendBatchCommand(ctx, ips, cmdParams)
 
 		for _, err := range errs {
 			if err != nil {
-				return CommandFinishedMsg{Err: err, IPs: ips, Params: params}
+				return CommandFinishedMsg{Err: err, IPs: ips, Params: cmdParams}
 			}
 		}
-		return CommandFinishedMsg{Err: nil, IPs: ips, Params: params}
+		return CommandFinishedMsg{Err: nil, IPs: ips, Params: cmdParams}
 	}
+}
+
+func (m Model) dispatchPilotCmd(params wiz.PilotParams) tea.Cmd {
+	return m.dispatchPilotCmdToDevices(m.Registry.GetSelectedOrActive(), params)
+}
+
+func (m *Model) processTimerTick() []tea.Cmd {
+	var cmds []tea.Cmd
+	if m.sleepTimerSecs > 0 {
+		m.sleepTimerSecs--
+		if m.sleepTimerSecs == 0 {
+			m.setStatusMessage("Sleep timer expired. Turning off lights.")
+			cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
+			cmds = append(cmds, SendOSCNotification("gowiz Sleep Timer", "Sleep timer expired. Turning off WiZ lights."))
+		}
+	}
+
+	if fadeCmd := m.processFadeStep(); fadeCmd != nil {
+		cmds = append(cmds, fadeCmd)
+	}
+
+	if m.statusMessage != "" && time.Since(m.statusTimer) > 4*time.Second {
+		m.statusMessage = ""
+	}
+
+	cmds = append(cmds, tickTimerCmd())
+	return cmds
+}
+
+func (m *Model) processFadeStep() tea.Cmd {
+	if !m.fadeActive {
+		return nil
+	}
+
+	m.fadeElapsedSecs++
+	if m.fadeElapsedSecs >= m.fadeDurationSecs {
+		m.fadeActive = false
+		lbl := m.fadeLabel
+		if lbl == "" {
+			lbl = "Fade"
+		}
+		m.setStatusMessage(fmt.Sprintf("%s transition complete.", lbl))
+
+		if m.fadeTurnOffOnFinish {
+			return m.dispatchPilotCmd(wiz.NewPowerParams(false))
+		}
+
+		st := true
+		params := wiz.PilotParams{State: &st}
+		if m.fadeTargetDim > 0 {
+			dim := wiz.Clamp(m.fadeTargetDim, 10, 100)
+			params.Dimming = &dim
+		}
+		if m.fadeTargetTemp > 0 {
+			temp := wiz.Clamp(m.fadeTargetTemp, 2200, 6500)
+			params.Temp = &temp
+		}
+		return m.dispatchPilotCmd(params)
+	}
+
+	progress := float64(m.fadeElapsedSecs) / float64(m.fadeDurationSecs)
+	curDim := m.fadeStartDim + int(float64(m.fadeTargetDim-m.fadeStartDim)*progress)
+	curDim = wiz.Clamp(curDim, 10, 100)
+
+	st := true
+	params := wiz.PilotParams{
+		State:   &st,
+		Dimming: &curDim,
+	}
+
+	if m.fadeTargetTemp > 0 && m.fadeStartTemp > 0 {
+		curTemp := m.fadeStartTemp + int(float64(m.fadeTargetTemp-m.fadeStartTemp)*progress)
+		curTemp = wiz.Clamp(curTemp, 2200, 6500)
+		params.Temp = &curTemp
+	}
+
+	return m.dispatchPilotCmd(params)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -163,18 +303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickAnimCmd())
 
 	case TimerTickMsg:
-		if m.sleepTimerSecs > 0 {
-			m.sleepTimerSecs--
-			if m.sleepTimerSecs == 0 {
-				m.setStatusMessage("Sleep timer expired. Turning off lights.")
-				cmds = append(cmds, m.dispatchPilotCmd(wiz.NewPowerParams(false)))
-				cmds = append(cmds, SendOSCNotification("gowiz Sleep Timer", "Sleep timer expired. Turning off WiZ lights."))
-			}
-		}
-		if m.statusMessage != "" && time.Since(m.statusTimer) > 4*time.Second {
-			m.statusMessage = ""
-		}
-		cmds = append(cmds, tickTimerCmd())
+		cmds = append(cmds, m.processTimerTick()...)
 
 	case TelemetryTickMsg:
 		cmds = append(cmds, m.pollTelemetryCmd(), tickTelemetryCmd())
@@ -182,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TelemetryReceivedMsg:
 		if dev, found := m.Registry.Get(msg.IP); found {
 			if msg.Err == nil && msg.Pilot != nil {
-				dev.UpdateFromPilot(*msg.Pilot)
+				dev.UpdateFromTelemetry(*msg.Pilot)
 				dev.Online = true
 			} else {
 				dev.Online = false
@@ -195,6 +324,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Registry.AddOrUpdate(wiz.NewDevice(ip))
 			foundCount++
 		}
+		m.clampDeviceCursor()
 		m.setStatusMessage(fmt.Sprintf("Network scan complete. Found %d device(s).", foundCount))
 		cmds = append(cmds, SendOSCNotification("gowiz Network Scan", fmt.Sprintf("Found %d WiZ device(s) on network.", foundCount)))
 
@@ -269,6 +399,30 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		m.mode = ModeHelp
 		return m, nil
 
+	case "enter":
+		switch m.activePanel {
+		case PanelScenes:
+			scenes := wiz.FilterScenes(m.searchQuery)
+			if m.sceneCursor >= 0 && m.sceneCursor < len(scenes) {
+				scene := scenes[m.sceneCursor]
+				m.setStatusMessage(fmt.Sprintf("Sending Scene: %s...", scene.Name))
+				return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
+			}
+		case PanelDevices:
+			devices := m.Registry.List()
+			if m.deviceCursor >= 0 && m.deviceCursor < len(devices) {
+				dev := devices[m.deviceCursor]
+				m.setActiveDevice(dev.IP)
+				m.setStatusMessage(fmt.Sprintf("Active bulb set to %s", dev.IP))
+			}
+		case PanelControl:
+			active, ok := m.Registry.GetActive()
+			if ok {
+				return m, m.dispatchPilotCmd(wiz.NewPowerParams(!active.State))
+			}
+		}
+		return m, nil
+
 	case ":":
 		m.mode = ModeCommand
 		m.commandBuffer = ""
@@ -303,7 +457,11 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 
 	case "home":
 		if m.activePanel == PanelDevices {
-			m.deviceCursor = 0
+			devices := m.Registry.List()
+			if len(devices) > 0 {
+				m.deviceCursor = 0
+				m.setActiveDevice(devices[0].IP)
+			}
 		} else if m.activePanel == PanelScenes {
 			m.sceneCursor = 0
 		}
@@ -313,7 +471,7 @@ func (m Model) handleNormalOrVisualKey(key string) (tea.Model, tea.Cmd) {
 		devices := m.Registry.List()
 		if m.activePanel == PanelDevices && len(devices) > 0 {
 			m.deviceCursor = len(devices) - 1
-			m.Registry.SetActive(devices[m.deviceCursor].IP)
+			m.setActiveDevice(devices[m.deviceCursor].IP)
 		} else if m.activePanel == PanelScenes {
 			scenes := wiz.FilterScenes(m.searchQuery)
 			if len(scenes) > 0 {
@@ -403,7 +561,7 @@ func (m Model) navigateDown() (Model, tea.Cmd) {
 		devices := m.Registry.List()
 		if len(devices) > 0 {
 			m.deviceCursor = (m.deviceCursor + 1) % len(devices)
-			m.Registry.SetActive(devices[m.deviceCursor].IP)
+			m.setActiveDevice(devices[m.deviceCursor].IP)
 		}
 	} else if m.activePanel == PanelScenes {
 		scenes := wiz.FilterScenes(m.searchQuery)
@@ -428,7 +586,7 @@ func (m Model) navigateUp() (Model, tea.Cmd) {
 			if m.deviceCursor < 0 {
 				m.deviceCursor = len(devices) - 1
 			}
-			m.Registry.SetActive(devices[m.deviceCursor].IP)
+			m.setActiveDevice(devices[m.deviceCursor].IP)
 		}
 	} else if m.activePanel == PanelScenes {
 		scenes := wiz.FilterScenes(m.searchQuery)
@@ -459,75 +617,364 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		parts := strings.Fields(cmdStr)
-		verb := strings.ToLower(parts[0])
+		activeDev, _ := m.Registry.GetActive()
+		var customPhases []circadian.SchedulePhase
+		var roomPhases map[string][]circadian.SchedulePhase
+		if m.configManager != nil {
+			cfg := m.configManager.GetConfig()
+			customPhases = cfg.CircadianPhases
+			roomPhases = cfg.RoomCircadianPhases
+		}
+		res := ExecuteCommandWithRoomPhases(cmdStr, activeDev, customPhases, roomPhases)
 
-		switch verb {
-		case "q", "quit", "exit":
+		if res.Quit {
 			return m, tea.Quit
-
-		case "scan":
+		}
+		if res.Help {
+			m.mode = ModeHelp
+			return m, nil
+		}
+		if res.Scan {
 			m.setStatusMessage("Scanning network...")
 			return m, m.scanNetworkCmd()
-
-		case "scene":
-			if len(parts) > 1 {
-				arg := strings.Join(parts[1:], " ")
-				if id, err := strconv.Atoi(arg); err == nil {
-					scene := wiz.GetSceneByID(id)
-					m.setStatusMessage(fmt.Sprintf("Scene set: %s", scene.Name))
-					return m, m.dispatchPilotCmd(wiz.NewSceneParams(id))
-				} else if scene, found := wiz.GetSceneByName(arg); found {
-					m.setStatusMessage(fmt.Sprintf("Scene set: %s", scene.Name))
-					return m, m.dispatchPilotCmd(wiz.NewSceneParams(scene.ID))
-				} else {
-					m.setStatusMessage(fmt.Sprintf("Unknown scene: %s", arg))
+		}
+		if res.SetSleepTimer > 0 {
+			m.sleepTimerSecs = res.SetSleepTimer
+		}
+		if res.IsFadeCommand {
+			startDim := 50
+			startTemp := 2700
+			if activeDev != nil {
+				if activeDev.Brightness > 0 {
+					startDim = activeDev.Brightness
+				}
+				if activeDev.Temp > 0 {
+					startTemp = activeDev.Temp
 				}
 			}
-
-		case "dim":
-			if len(parts) > 1 {
-				if dim, err := strconv.Atoi(parts[1]); err == nil {
-					m.setStatusMessage(fmt.Sprintf("Brightness set: %d%%", dim))
-					return m, m.dispatchPilotCmd(wiz.NewDimmingParams(dim))
+			m.fadeActive = true
+			m.fadeStartDim = startDim
+			m.fadeTargetDim = res.SetFadeDimming
+			m.fadeStartTemp = startTemp
+			m.fadeTargetTemp = res.SetFadeColorTemp
+			m.fadeDurationSecs = res.SetFadeDuration
+			m.fadeElapsedSecs = 0
+			m.fadeTurnOffOnFinish = res.FadeTurnOff
+			m.fadeLabel = res.FadeLabel
+			if m.fadeLabel == "" {
+				m.fadeLabel = "🌆 Fade"
+			}
+		}
+		if res.Undo {
+			if activeDev != nil {
+				stack := m.undoStack[activeDev.IP]
+				if len(stack) > 0 {
+					lastState := stack[len(stack)-1]
+					m.undoStack[activeDev.IP] = stack[:len(stack)-1]
+					m.setStatusMessage("Undid previous state change.")
+					return m, m.dispatchPilotCmd(lastState)
 				}
+				m.setStatusMessage("Nothing to undo.")
 			}
-
-		case "temp":
-			if len(parts) > 1 {
-				if temp, err := strconv.Atoi(parts[1]); err == nil {
-					m.setStatusMessage(fmt.Sprintf("Color temp set: %dK", temp))
-					return m, m.dispatchPilotCmd(wiz.NewTempParams(temp))
-				}
-			}
-
-		case "rgb":
-			if len(parts) >= 4 {
-				r, _ := strconv.Atoi(parts[1])
-				g, _ := strconv.Atoi(parts[2])
-				b, _ := strconv.Atoi(parts[3])
-				m.setStatusMessage(fmt.Sprintf("RGB color set: R:%d G:%d B:%d", r, g, b))
-				return m, m.dispatchPilotCmd(wiz.NewRGBParams(r, g, b))
-			}
-
-		case "timer":
-			if len(parts) > 1 {
-				if mins, err := strconv.Atoi(parts[1]); err == nil {
-					m.sleepTimerSecs = mins * 60
-					m.setStatusMessage(fmt.Sprintf("Sleep timer set: %d minutes.", mins))
-				}
-			}
-
-		default:
-			m.setStatusMessage(fmt.Sprintf("Unknown command: :%s", cmdStr))
+			return m, nil
 		}
 
+		if res.ConfigInfo {
+			path := "~/.config/gowiz/config.json"
+			aliasCount := 0
+			if m.configManager != nil {
+				path = m.configManager.FilePath()
+				aliasCount = len(m.configManager.GetConfig().DeviceAliases)
+			}
+			m.setStatusMessage(fmt.Sprintf("Config: %s (%d saved alias(es))", path, aliasCount))
+			return m, nil
+		}
+
+		if res.ShowInfo {
+			if activeDev != nil {
+				macStr := activeDev.MAC
+				if macStr == "" {
+					macStr = "N/A"
+				}
+				roomStr := activeDev.Room
+				if roomStr == "" {
+					roomStr = "Unassigned"
+				}
+				stateStr := "OFF"
+				if activeDev.State {
+					stateStr = "ON"
+				}
+				modeStr := fmt.Sprintf("Brightness: %d%%", activeDev.Brightness)
+				if activeDev.SceneID > 0 {
+					sc := wiz.GetSceneByID(activeDev.SceneID)
+					modeStr += fmt.Sprintf(" | Scene: %s (#%d)", sc.Name, activeDev.SceneID)
+				} else if activeDev.Temp > 0 {
+					modeStr += fmt.Sprintf(" | Temp: %dK", activeDev.Temp)
+				} else {
+					modeStr += fmt.Sprintf(" | RGB: #%02x%02x%02x", activeDev.RGB[0], activeDev.RGB[1], activeDev.RGB[2])
+				}
+				m.setStatusMessage(fmt.Sprintf("💡 %s (%s) │ MAC: %s │ Room: %s │ State: %s │ %s │ %s", activeDev.Name, activeDev.IP, macStr, roomStr, stateStr, activeDev.SignalBar(), modeStr))
+			} else {
+				m.setStatusMessage("No active WiZ light selected.")
+			}
+			return m, nil
+		}
+
+		if res.ExportPath != "" {
+			if m.configManager != nil {
+				if err := m.configManager.ExportToFile(res.ExportPath); err != nil {
+					m.setStatusMessage(fmt.Sprintf("⚠️ Export failed: %v", err))
+				} else {
+					m.setStatusMessage(fmt.Sprintf("✓ Configuration exported to %s", res.ExportPath))
+				}
+			} else {
+				m.setStatusMessage("No config manager attached.")
+			}
+			return m, nil
+		}
+
+		if res.ImportPath != "" {
+			if m.configManager != nil {
+				if err := m.configManager.ImportFromFile(res.ImportPath); err != nil {
+					m.setStatusMessage(fmt.Sprintf("⚠️ Import failed: %v", err))
+				} else {
+					cfg := m.configManager.GetConfig()
+					m.Registry.ApplyAliases(cfg.DeviceAliases)
+					m.Registry.ApplyRooms(cfg.DeviceRooms)
+					for _, recIP := range cfg.RecentIPs {
+						if recIP != "" && recIP != wiz.FallbackIP {
+							m.Registry.AddOrUpdate(wiz.NewDevice(recIP))
+						}
+					}
+					m.setStatusMessage(fmt.Sprintf("✓ Configuration imported from %s", res.ImportPath))
+				}
+			} else {
+				m.setStatusMessage("No config manager attached.")
+			}
+			return m, nil
+		}
+
+		if res.ShowRecent {
+			if m.configManager != nil {
+				recents := m.configManager.GetRecentIPs()
+				if len(recents) == 0 {
+					m.setStatusMessage("No recent IP targets saved.")
+				} else {
+					m.setStatusMessage(fmt.Sprintf("Recent targets (%d): %s", len(recents), strings.Join(recents, ", ")))
+				}
+			} else {
+				m.setStatusMessage("No configuration manager attached.")
+			}
+			return m, nil
+		}
+
+		if res.ListPresets {
+			var list []string
+			for k := range BuiltinPresets {
+				list = append(list, k+" [builtin]")
+			}
+			if m.configManager != nil {
+				customs := m.configManager.GetPresets()
+				for k := range customs {
+					list = append(list, k+" [custom]")
+				}
+			}
+			if len(list) == 0 {
+				m.setStatusMessage("No presets defined.")
+			} else {
+				m.setStatusMessage(fmt.Sprintf("Presets (%d): %s", len(list), strings.Join(list, ", ")))
+			}
+			return m, nil
+		}
+
+		if res.ListCategories {
+			if res.StatusMsg != "" {
+				m.setStatusMessage(res.StatusMsg)
+			}
+			return m, nil
+		}
+
+		if res.SetSearchQuery != "" {
+			m.searchQuery = res.SetSearchQuery
+			m.clampSceneCursor()
+			if res.FocusScenes {
+				m.activePanel = PanelScenes
+			}
+		} else if res.FocusScenes {
+			m.activePanel = PanelScenes
+		}
+
+		if res.SavePresetName != "" && activeDev != nil {
+			preset := PresetFromDevice(activeDev)
+			if m.configManager != nil {
+				_ = m.configManager.SetPreset(res.SavePresetName, preset)
+				m.setStatusMessage(fmt.Sprintf("Saved current state as preset '%s'", res.SavePresetName))
+			} else {
+				m.setStatusMessage("Config manager unavailable; preset not saved.")
+			}
+			return m, nil
+		}
+
+		if res.DeletePresetName != "" {
+			if m.configManager != nil {
+				_ = m.configManager.DeletePreset(res.DeletePresetName)
+				m.setStatusMessage(fmt.Sprintf("Deleted preset '%s'", res.DeletePresetName))
+			} else {
+				m.setStatusMessage("Config manager unavailable; preset not deleted.")
+			}
+			return m, nil
+		}
+
+		if res.ApplyPresetName != "" {
+			var params wiz.PilotParams
+			found := false
+
+			if m.configManager != nil {
+				if cp, ok := m.configManager.GetPreset(res.ApplyPresetName); ok {
+					params = PresetToPilotParams(cp)
+					found = true
+				}
+			}
+			if !found {
+				if bp, ok := BuiltinPresets[res.ApplyPresetName]; ok {
+					params = PresetToPilotParams(bp)
+					found = true
+				}
+			}
+
+			if !found {
+				m.setStatusMessage(fmt.Sprintf("Preset not found: '%s'", res.ApplyPresetName))
+				return m, nil
+			}
+
+			targets := m.Registry.GetSelectedOrActive()
+			if res.TargetRoom != "" {
+				var groups map[string][]string
+				if m.configManager != nil {
+					groups = m.configManager.GetGroups()
+				}
+				targets = m.Registry.GetDevicesByGroupOrRoom(res.TargetRoom, groups)
+				if len(targets) == 0 {
+					m.setStatusMessage(fmt.Sprintf("No devices found in group/room '%s'", res.TargetRoom))
+					return m, nil
+				}
+			}
+
+			if res.StatusMsg != "" {
+				m.setStatusMessage(res.StatusMsg)
+			} else {
+				m.setStatusMessage(fmt.Sprintf("Activated preset '%s'", res.ApplyPresetName))
+			}
+			return m, m.dispatchPilotCmdToDevices(targets, params)
+		}
+
+		if res.SetGroupName != "" && len(res.SetGroupMembers) > 0 {
+			if m.configManager != nil {
+				_ = m.configManager.SetGroup(res.SetGroupName, res.SetGroupMembers)
+				m.setStatusMessage(fmt.Sprintf("Created group '%s' with %d member(s)", res.SetGroupName, len(res.SetGroupMembers)))
+			} else {
+				m.setStatusMessage("Config manager unavailable; group not saved.")
+			}
+			return m, nil
+		}
+
+		if res.DeleteGroupName != "" {
+			if m.configManager != nil {
+				_ = m.configManager.DeleteGroup(res.DeleteGroupName)
+				m.setStatusMessage(fmt.Sprintf("Deleted group '%s'", res.DeleteGroupName))
+			} else {
+				m.setStatusMessage("Config manager unavailable; group not deleted.")
+			}
+			return m, nil
+		}
+
+		if res.ListGroups {
+			if m.configManager != nil {
+				groups := m.configManager.GetGroups()
+				if len(groups) == 0 {
+					m.setStatusMessage("No custom device groups configured.")
+				} else {
+					names := make([]string, 0, len(groups))
+					for g := range groups {
+						names = append(names, g)
+					}
+					m.setStatusMessage(fmt.Sprintf("Groups (%d): %s", len(groups), strings.Join(names, ", ")))
+				}
+			}
+			return m, nil
+		}
+
+		if res.TargetIP != "" {
+			m.Registry.AddOrUpdate(wiz.NewDevice(res.TargetIP))
+			m.setActiveDevice(res.TargetIP)
+			devices := m.Registry.List()
+			for i, dev := range devices {
+				if dev.IP == res.TargetIP {
+					m.deviceCursor = i
+					break
+				}
+			}
+			m.setStatusMessage(fmt.Sprintf("Target bulb set to %s", res.TargetIP))
+			return m, m.pollTelemetryCmd()
+		}
+
+		if res.NewDeviceName != "" && activeDev != nil {
+			m.Registry.SetName(activeDev.IP, res.NewDeviceName)
+			if m.configManager != nil {
+				_ = m.configManager.SetAlias(activeDev.IP, res.NewDeviceName)
+			}
+		}
+
+		if res.SetDeviceRoom != "" && activeDev != nil {
+			if res.SetDeviceRoom == "CLEAR" {
+				m.Registry.SetRoom(activeDev.IP, "")
+				if m.configManager != nil {
+					_ = m.configManager.SetRoom(activeDev.IP, "")
+				}
+			} else {
+				m.Registry.SetRoom(activeDev.IP, res.SetDeviceRoom)
+				if m.configManager != nil {
+					_ = m.configManager.SetRoom(activeDev.IP, res.SetDeviceRoom)
+				}
+			}
+		}
+
+		if res.TargetRoom != "" {
+			var groups map[string][]string
+			if m.configManager != nil {
+				groups = m.configManager.GetGroups()
+			}
+			roomDevs := m.Registry.GetDevicesByGroupOrRoom(res.TargetRoom, groups)
+			if len(roomDevs) == 0 {
+				m.setStatusMessage(fmt.Sprintf("No devices found in group/room '%s'", res.TargetRoom))
+				return m, nil
+			}
+			if res.PilotParams != nil {
+				if res.StatusMsg != "" {
+					m.setStatusMessage(res.StatusMsg)
+				}
+				return m, m.dispatchPilotCmdToDevices(roomDevs, *res.PilotParams)
+			}
+			m.setStatusMessage(fmt.Sprintf("Group/room '%s' has %d device(s)", res.TargetRoom, len(roomDevs)))
+			return m, nil
+		}
+
+		if res.StatusMsg != "" {
+			m.setStatusMessage(res.StatusMsg)
+		}
+		if res.PilotParams != nil {
+			return m, m.dispatchPilotCmd(*res.PilotParams)
+		}
 		return m, nil
 
 	case "backspace":
 		if len(m.commandBuffer) > 0 {
 			m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
 		}
+		return m, nil
+
+	case "ctrl+u":
+		m.commandBuffer = ""
 		return m, nil
 
 	default:
@@ -540,21 +987,53 @@ func (m Model) handleCommandKey(key string) (Model, tea.Cmd) {
 
 func (m Model) handleSearchKey(key string) (Model, tea.Cmd) {
 	switch key {
-	case "enter", "esc":
+	case "enter":
 		m.mode = ModeNormal
+		m.activePanel = PanelScenes
+		m.clampSceneCursor()
+		return m, nil
+
+	case "esc":
+		m.mode = ModeNormal
+		m.clampSceneCursor()
 		return m, nil
 
 	case "backspace":
 		if len(m.searchQuery) > 0 {
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 		}
+		m.clampSceneCursor()
+		return m, nil
+
+	case "ctrl+u":
+		m.searchQuery = ""
+		m.clampSceneCursor()
 		return m, nil
 
 	default:
 		if len(key) == 1 {
 			m.searchQuery += key
 		}
+		m.clampSceneCursor()
 		return m, nil
+	}
+}
+
+func (m *Model) clampDeviceCursor() {
+	devices := m.Registry.List()
+	if len(devices) == 0 {
+		m.deviceCursor = 0
+	} else if m.deviceCursor >= len(devices) {
+		m.deviceCursor = len(devices) - 1
+	}
+}
+
+func (m *Model) clampSceneCursor() {
+	scenes := wiz.FilterScenes(m.searchQuery)
+	if len(scenes) == 0 {
+		m.sceneCursor = 0
+	} else if m.sceneCursor >= len(scenes) {
+		m.sceneCursor = len(scenes) - 1
 	}
 }
 
@@ -591,6 +1070,11 @@ func (m Model) View() string {
 	// Total available content height for body (m.height - titleBar line - statusBar line)
 	contentHeight := max(m.height-2, 6)
 
+	fadeRemainingSecs := 0
+	if m.fadeActive {
+		fadeRemainingSecs = max(m.fadeDurationSecs-m.fadeElapsedSecs, 0)
+	}
+
 	// Compact / Narrow Terminal Mode (width < 65 or height < 15)
 	if m.width < 65 || m.height < 15 {
 		var activeBody string
@@ -598,7 +1082,7 @@ func (m Model) View() string {
 		case PanelDevices:
 			activeBody = views.RenderDeviceList(m.Registry, m.deviceCursor, true, m.width, contentHeight)
 		case PanelControl:
-			activeBody = views.RenderControlPanel(activeDev, true, m.sleepTimerSecs, m.width, contentHeight)
+			activeBody = views.RenderControlPanel(activeDev, true, m.sleepTimerSecs, fadeRemainingSecs, m.fadeLabel, m.width, contentHeight)
 		case PanelScenes:
 			activeBody = views.RenderScenePicker(m.searchQuery, activeSceneID, m.sceneCursor, true, m.animFrame, m.width, contentHeight)
 		}
@@ -613,7 +1097,7 @@ func (m Model) View() string {
 
 	// Render Control Panel first and measure its actual rendered line height
 	initialControlHeight := clamp(int(float64(contentHeight)*0.40), 8, 12)
-	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, mainWidth, initialControlHeight)
+	topRight := views.RenderControlPanel(activeDev, m.activePanel == PanelControl, m.sleepTimerSecs, fadeRemainingSecs, m.fadeLabel, mainWidth, initialControlHeight)
 	actualControlLines := lipgloss.Height(topRight)
 
 	// Scene picker gets the exact remaining height so total rightCol height == contentHeight
@@ -629,6 +1113,14 @@ func (m Model) View() string {
 func (m *Model) setStatusMessage(msg string) {
 	m.statusMessage = msg
 	m.statusTimer = time.Now()
+}
+
+func (m *Model) setActiveDevice(ip string) {
+	if m.Registry.SetActive(ip) {
+		if m.configManager != nil {
+			_ = m.configManager.AddRecentIP(ip)
+		}
+	}
 }
 
 func clamp(val, min, max int) int {

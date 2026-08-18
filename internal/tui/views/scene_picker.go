@@ -74,7 +74,12 @@ func RenderScenePicker(filterQuery string, activeSceneID int, sceneCursor int, i
 				activeBadge = " " + styles.StatusSuccess.Render("[ACTIVE]")
 			}
 
-			leftContent := fmt.Sprintf("%s %s %s%s", shortcutStr, nameFormatted, swatch, activeBadge)
+			catPill := ""
+			if scene.Category != "" && innerWidth > 32 {
+				catPill = " " + lipgloss.NewStyle().Foreground(styles.Subtext0).Render(fmt.Sprintf("[%s]", scene.Category))
+			}
+
+			leftContent := fmt.Sprintf("%s %s %s%s%s", shortcutStr, nameFormatted, swatch, catPill, activeBadge)
 
 			if isCursor {
 				applyHint := styles.StatusSuccess.Render(" ↵ Enter")
